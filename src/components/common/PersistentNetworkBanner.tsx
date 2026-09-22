@@ -19,7 +19,8 @@ export const PersistentNetworkBanner: React.FC = () => {
     syncStatus, 
     triggerManualSync, 
     storageUsage,
-    lastSyncedAt
+    lastSyncedAt,
+    isWsConnected
   } = useNetwork();
 
   return (
@@ -44,6 +45,9 @@ export const PersistentNetworkBanner: React.FC = () => {
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               🟢 ONLINE
+              {isWsConnected && (
+                <span className="ml-1 text-[9px] bg-emerald-600/60 text-white px-1.5 py-0.2 rounded font-mono">WS LIVE</span>
+              )}
             </span>
           ) : (
             <span 

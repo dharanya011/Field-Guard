@@ -1,6 +1,9 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import { apiRouter } from './server/routes/api';
+import { wsSyncManager } from './server/websocket';
 import { 
   verifyCredentials, 
   generateToken, 
@@ -106,87 +109,6 @@ async function startServer() {
   });
 
   // ==========================================
-  // SYNCHRONIZATION QUEUE & OPERATIONS PIPELINE
-  // ==========================================
-  const serverOperationStore = new Map<string, any>();
-
-  // POST /api/sync/operations - Batch process operations from client queue
-  app.post('/api/sync/operations', (req, res) => {
-    const { operations } = req.body;
-
-    if (!Array.isArray(operations) || operations.length === 0) {
-      res.status(400).json({ error: 'Operations array is required and must not be empty.' });
-      return;
-    }
-
-    const processedResults = operations.map((op: any) => {
-      if (!op.operationId) {
-        return {
-          operationId: op.operationId || 'UNKNOWN',
-          status: 'FAILED',
-          errorMessage: 'Missing operationId in payload'
-        };
-      }
-
-      // Check simulated failure flags if explicitly provided
-      if (op.forceFail || op.field === 'Simulate Server Error') {
-        return {
-          operationId: op.operationId,
-          status: 'FAILED',
-          errorMessage: 'Backend ingestion node rejected payload: CRC-32 checksum mismatch',
-          retryable: true
-        };
-      }
-
-      if (op.forceConflict || op.field === 'Simulate Conflict') {
-        return {
-          operationId: op.operationId,
-          status: 'CONFLICT',
-          conflictDetails: `Concurrent revision detected on node: Server holds conflicting timestamp for entity ${op.entityId}`,
-          serverValue: 'SERVER_OVERRIDE_VAL'
-        };
-      }
-
-      const confirmedAt = new Date().toISOString();
-      serverOperationStore.set(op.operationId, {
-        ...op,
-        status: 'SYNCED',
-        syncedAt: confirmedAt,
-        serverAckTimestamp: confirmedAt
-      });
-
-      return {
-        operationId: op.operationId,
-        status: 'SYNCED',
-        syncedAt: confirmedAt,
-        message: 'Successfully persisted to WA-1 Cloud Primary Node'
-      };
-    });
-
-    res.json({
-      success: true,
-      processedCount: processedResults.length,
-      syncedCount: processedResults.filter((r: any) => r.status === 'SYNCED').length,
-      failedCount: processedResults.filter((r: any) => r.status === 'FAILED').length,
-      conflictCount: processedResults.filter((r: any) => r.status === 'CONFLICT').length,
-      operations: processedResults,
-      serverTimestamp: new Date().toISOString()
-    });
-  });
-
-  // GET /api/sync/queue - Server queue state and health
-  app.get('/api/sync/queue', (req, res) => {
-    res.json({
-      serverQueueSize: serverOperationStore.size,
-      operations: Array.from(serverOperationStore.values()),
-      serverNode: 'WA1-CLOUD-PRIMARY-SG1',
-      status: 'ONLINE',
-      timestamp: new Date().toISOString()
-    });
-  });
-
-
-  // ==========================================
   // ROLE-BASED ACCESS CONTROLLED ENDPOINTS
   // ==========================================
 
@@ -272,6 +194,9 @@ async function startServer() {
     });
   });
 
+  // Mount REST API Router
+  app.use('/api', apiRouter);
+
   // ==========================================
   // VITE DEV / PRODUCTION MIDDLEWARE
   // ==========================================
@@ -289,7 +214,10 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const httpServer = http.createServer(app);
+  wsSyncManager.init(httpServer);
+
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`WA-1 Enterprise Field Server running on http://0.0.0.0:${PORT}`);
   });
 }

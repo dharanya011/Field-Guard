@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { db } from '../db/offlineDb';
+import { syncEngine, type SyncEngineStats } from '../services/syncService';
 
 interface NetworkContextType {
   isOnline: boolean;
@@ -11,6 +12,7 @@ interface NetworkContextType {
   unsyncedChangesCount: number;
   triggerManualSync: () => Promise<void>;
   storageUsage: { usedKb: number; recordCount: number };
+  isWsConnected: boolean;
 }
 
 const NetworkContext = createContext<NetworkContextType | undefined>(undefined);
@@ -33,13 +35,32 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     return null;
   });
-  const [unsyncedChangesCount, setUnsyncedChangesCount] = useState<number>(1);
+  const [unsyncedChangesCount, setUnsyncedChangesCount] = useState<number>(0);
+  const [isWsConnected, setIsWsConnected] = useState<boolean>(false);
   const [storageUsage, setStorageUsage] = useState<{ usedKb: number; recordCount: number }>({
     usedKb: 48,
     recordCount: 5
   });
 
   const effectiveOnline = hardwareOnline && !isSimulatedOffline;
+
+  // Initialize WebSocket and syncEngine subscriber
+  useEffect(() => {
+    syncEngine.initWebSocket();
+
+    const unsubscribe = syncEngine.subscribe((stats: SyncEngineStats) => {
+      setIsWsConnected(stats.isWsConnected);
+      setLastSyncedAt(stats.lastSyncedAt);
+      if (stats.syncState === 'SYNCING') setSyncStatus('SYNCING');
+      else if (stats.syncState === 'SYNCED') setSyncStatus('SUCCESS');
+      else if (stats.syncState === 'FAILED') setSyncStatus('ERROR');
+      else setSyncStatus('IDLE');
+
+      setUnsyncedChangesCount(stats.pendingOpsCount + stats.unsyncedInspectionsCount);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setHardwareOnline(true);
@@ -96,53 +117,11 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const triggerManualSync = async () => {
-    if (!effectiveOnline) return;
-
-    setSyncStatus('SYNCING');
-    // Actual Dexie sync cycle: transitions pending drafts to synced
-    setTimeout(async () => {
-      try {
-        const pendingItems = await db.inspections.where('syncState').equals('PENDING').toArray();
-        for (const item of pendingItems) {
-          await db.inspections.update(item.id, {
-            syncState: 'SYNCED',
-            offlineDraft: false,
-            lastModified: new Date().toISOString()
-          });
-          // Update sync status record
-          await db.syncStatus.put({
-            id: `sync-${item.id}`,
-            entityType: 'INSPECTION',
-            entityId: item.id,
-            status: 'SYNCED',
-            pendingChangesCount: 0,
-            lastAttemptAt: new Date().toISOString()
-          });
-        }
-
-        // Mark pending operations as processed
-        const queuedOps = await db.pendingOperations.where('status').equals('QUEUED').toArray();
-        for (const op of queuedOps) {
-          await db.pendingOperations.update(op.id, { status: 'IN_FLIGHT' });
-          await db.pendingOperations.delete(op.id);
-        }
-
-        await updateCounts();
-        setSyncStatus('SUCCESS');
-        const now = new Date();
-        setLastSyncedAt(now);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('wa1_last_synced_at', now.toISOString());
-        }
-
-        setTimeout(() => {
-          setSyncStatus('IDLE');
-        }, 2000);
-      } catch {
-        setSyncStatus('ERROR');
-        setTimeout(() => setSyncStatus('IDLE'), 3000);
-      }
-    }, 1200);
+    const success = await syncEngine.executeSync(effectiveOnline, isSimulatedOffline);
+    await updateCounts();
+    if (!success) {
+      console.log('[WA-1 NETWORK CONTEXT] Offline or network error during sync. All data preserved locally.');
+    }
   };
 
   return (
@@ -156,7 +135,8 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
         lastSyncedAt,
         unsyncedChangesCount,
         triggerManualSync,
-        storageUsage
+        storageUsage,
+        isWsConnected
       }}
     >
       {children}

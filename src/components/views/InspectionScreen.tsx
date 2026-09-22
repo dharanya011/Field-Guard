@@ -26,6 +26,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useRouter } from '../../context/RouterContext';
 import { useNetwork } from '../../context/NetworkContext';
 import { StatusBadge } from '../common/StatusBadge';
+import { ResumableUploader } from '../common/ResumableUploader';
+import { 
+  calculateEvidenceReliability, 
+  generatePredictiveAlerts 
+} from '../../services/analyticsIntelligence';
 import type { 
   Inspection, 
   ChecklistItem, 
@@ -428,6 +433,19 @@ export const InspectionScreen: React.FC<InspectionScreenProps> = ({
   const failCount = Object.values(checklistMap).filter(v => v.status === 'FAIL').length;
   const passCount = Object.values(checklistMap).filter(v => v.status === 'PASS').length;
 
+  // Calculate Evidence Reliability & Predictive Alerts
+  const currentReliability = activeInspection
+    ? calculateEvidenceReliability({
+        ...activeInspection,
+        evidencePhotos: photos,
+        generalNotes,
+        gpsLocation: gps
+      }, inspections)
+    : { score: 92, factors: {} as any, reasons: [] };
+
+  const eqPredictiveAlerts = generatePredictiveAlerts(equipments, inspections)
+    .filter(a => a.equipmentId === (activeInspection?.equipmentId || equipment.id));
+
   return (
     <div className="max-w-4xl mx-auto space-y-5 pb-28 md:pb-16 font-sans">
       {/* Top Mobile-First Navigation Header */}
@@ -606,13 +624,18 @@ export const InspectionScreen: React.FC<InspectionScreenProps> = ({
           </div>
         </div>
 
-        {/* Audit Progress Bar */}
-        <div className="px-5 py-2.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between text-xs">
+        {/* Audit Progress Bar & Evidence Reliability Indicator */}
+        <div className="px-5 py-2.5 bg-slate-50/70 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-slate-600 font-medium">Checklist Completed:</span>
             <span className="font-mono font-bold text-slate-900">{checkedCount} of 4</span>
           </div>
+
           <div className="flex items-center gap-3">
+            <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 font-mono font-bold text-[11px] border border-blue-200">
+              Evidence Reliability: {currentReliability.score}%
+            </span>
+
             {passCount > 0 && (
               <span className="text-emerald-700 font-semibold font-mono text-[11px] flex items-center gap-1">
                 <Check className="w-3 h-3" /> {passCount} Pass
@@ -626,6 +649,27 @@ export const InspectionScreen: React.FC<InspectionScreenProps> = ({
           </div>
         </div>
       </section>
+
+      {/* PREDICTIVE ALERTS BANNER FOR ASSET */}
+      {eqPredictiveAlerts.length > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 space-y-2 shadow-xs animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-600" />
+              <span className="font-bold text-xs uppercase tracking-wider text-amber-900 font-mono">
+                Predictive Equipment Alert Detected
+              </span>
+            </div>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900">
+              {eqPredictiveAlerts[0].risk} RISK
+            </span>
+          </div>
+          <p className="text-xs font-bold">{eqPredictiveAlerts[0].summary}</p>
+          <p className="text-xs text-amber-900">
+            <strong>Suggested Attention:</strong> {eqPredictiveAlerts[0].suggestedAttention}
+          </p>
+        </div>
+      )}
 
       {/* 2. CHECKLIST SECTION (Pressure Gauge, Physical Damage, Safety Seal, Expiry Date) */}
       <section className="space-y-3">
@@ -882,140 +926,12 @@ export const InspectionScreen: React.FC<InspectionScreenProps> = ({
       </section>
 
       {/* 4. PHOTO/EVIDENCE SECTION */}
-      <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Camera className="w-4 h-4 text-blue-600" />
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 font-display">
-              Inspection Photos & Evidence
-            </h2>
-          </div>
-          <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-            {photos.length} Photo{photos.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-        <p className="text-xs text-slate-500">
-          Capture high-resolution visual evidence of asset condition, serial tags, or damaged components.
-        </p>
-
-        {/* Hidden Camera/File Input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handlePhotoSelect}
-          className="hidden"
-          id="field-camera-upload"
-        />
-
-        {/* Camera / Upload Action Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="min-h-[50px] p-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-95 transition"
-          >
-            <Camera className="w-4 h-4 text-blue-600" />
-            <span>Open Camera / Select Photo</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleUsePresetPhoto(
-              'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80',
-              'Macro photo of safety relief seal wire anchor'
-            )}
-            className="min-h-[50px] p-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-95 transition"
-          >
-            <Upload className="w-4 h-4 text-slate-500" />
-            <span>Load Field Simulation Image</span>
-          </button>
-        </div>
-
-        {/* Pending Photo Preview & Caption Form */}
-        {photoPreviewUrl && (
-          <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-200 space-y-3 animate-in fade-in duration-200">
-            <span className="text-xs font-bold text-blue-900 block">
-              Photo Preview & Evidence Description
-            </span>
-            <div className="flex flex-col sm:flex-row gap-4 items-center">
-              <div className="w-full sm:w-40 h-28 rounded-lg overflow-hidden bg-slate-900 shrink-0 border border-slate-300">
-                <img 
-                  src={photoPreviewUrl} 
-                  alt="Inspection preview" 
-                  className="w-full h-full object-cover" 
-                />
-              </div>
-
-              <div className="flex-1 w-full space-y-2">
-                <label className="text-xs font-semibold text-slate-700 block">
-                  Evidence Description
-                </label>
-                <input
-                  type="text"
-                  value={evidenceCaption}
-                  onChange={(e) => setEvidenceCaption(e.target.value)}
-                  placeholder="e.g. Pressure gauge displaying 140 PSI with corrosion on bezel..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleAddEvidencePhoto}
-                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs active:scale-95 transition"
-                  >
-                    Confirm & Attach Photo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPhotoPreviewUrl(null)}
-                    className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-600 text-xs font-medium border border-slate-200 transition"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Attached Photos Gallery */}
-        {photos.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
-            {photos.map((photo) => (
-              <div 
-                key={photo.id}
-                className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-2 group"
-              >
-                <div className="relative h-32 rounded-lg overflow-hidden bg-slate-900">
-                  <img 
-                    src={photo.url} 
-                    alt={photo.description} 
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleRemovePhoto(photo.id)}
-                    className="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 shadow-md transition"
-                    title="Delete photo"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-800 line-clamp-2">
-                    {photo.description}
-                  </p>
-                  <p className="text-[10px] font-mono text-slate-400 mt-0.5">
-                    {new Date(photo.timestamp).toLocaleTimeString()}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <ResumableUploader
+        inspectionId={activeInspection?.id || inspectionId}
+        onPhotoAttached={(photo) => setPhotos(prev => [...prev, photo])}
+        existingPhotos={photos}
+        onPhotoRemoved={(id) => handleRemovePhoto(id)}
+      />
 
       {/* 5. GPS SECTION */}
       <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-3">
@@ -1109,17 +1025,17 @@ export const InspectionScreen: React.FC<InspectionScreenProps> = ({
       </section>
 
       {/* Floating Bottom Action Bar for Mobile Touch Convenience */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-xl z-30 flex items-center gap-3">
+      <div className="md:hidden fixed bottom-[56px] left-0 right-0 p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-xl z-30 flex items-center gap-3">
         <button
           onClick={handleReturn}
-          className="px-4 py-3 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs"
+          className="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs active:scale-95 transition"
         >
           Back
         </button>
         <button
           onClick={handleSaveInspection}
           disabled={isSaving}
-          className="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-blue-600/20"
+          className="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 active:scale-95 transition"
         >
           <Save className="w-4 h-4" />
           <span>SAVE INSPECTION</span>

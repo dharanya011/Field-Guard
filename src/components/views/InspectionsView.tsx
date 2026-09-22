@@ -8,10 +8,13 @@ import {
   Layers, 
   Calendar, 
   User, 
-  AlertTriangle 
+  AlertTriangle,
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react';
 import { useInspections } from '../../context/InspectionContext';
 import { StatusBadge } from '../common/StatusBadge';
+import { calculateEvidenceReliability, calculateSmartPriority } from '../../services/analyticsIntelligence';
 import type { Inspection, InspectionStatus } from '../../types';
 
 interface InspectionsViewProps {
@@ -108,7 +111,7 @@ export const InspectionsView: React.FC<InspectionsViewProps> = ({
                 <tr>
                   <th className="py-3 px-4">Inspection / Code</th>
                   <th className="py-3 px-4">Equipment & Location</th>
-                  <th className="py-3 px-4">Assigned Tech</th>
+                  <th className="py-3 px-4">Evidence Reliability</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Sync State</th>
                   <th className="py-3 px-4">Score</th>
@@ -116,74 +119,88 @@ export const InspectionsView: React.FC<InspectionsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filtered.map((insp) => (
-                  <tr
-                    key={insp.id}
-                    onClick={() => onSelectInspection(insp)}
-                    className="hover:bg-slate-850/80 cursor-pointer transition"
-                  >
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-white">{insp.title}</div>
-                      <div className="font-mono text-[11px] text-blue-400 mt-0.5">{insp.code}</div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="text-slate-200">{insp.equipmentName}</div>
-                      <div className="text-[11px] text-slate-400">{insp.facility}</div>
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-300">
-                      {insp.technicianName}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <StatusBadge status={insp.status} size="sm" />
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <StatusBadge status={insp.syncState} size="sm" />
-                    </td>
-                    <td className="py-3.5 px-4 font-mono font-bold">
-                      <span className={insp.score >= 80 ? 'text-emerald-400' : insp.score >= 60 ? 'text-amber-400' : 'text-rose-400'}>
-                        {insp.score}%
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <button className="text-blue-400 hover:text-blue-300 font-semibold inline-flex items-center gap-1">
-                        <span>Inspect</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((insp) => {
+                  const reliability = calculateEvidenceReliability(insp, inspections);
+
+                  return (
+                    <tr
+                      key={insp.id}
+                      onClick={() => onSelectInspection(insp)}
+                      className="hover:bg-slate-850/80 cursor-pointer transition"
+                    >
+                      <td className="py-3.5 px-4">
+                        <div className="font-semibold text-white">{insp.title}</div>
+                        <div className="font-mono text-[11px] text-blue-400 mt-0.5">{insp.code}</div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="text-slate-200">{insp.equipmentName}</div>
+                        <div className="text-[11px] text-slate-400">{insp.facility}</div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-950/80 text-blue-300 font-mono text-xs font-bold border border-blue-800">
+                          <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+                          <span>Reliability: {reliability.score}%</span>
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <StatusBadge status={insp.status} size="sm" />
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <StatusBadge status={insp.syncState} size="sm" />
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-bold">
+                        <span className={insp.score >= 80 ? 'text-emerald-400' : insp.score >= 60 ? 'text-amber-400' : 'text-rose-400'}>
+                          {insp.score}%
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <button className="text-blue-400 hover:text-blue-300 font-semibold inline-flex items-center gap-1">
+                          <span>Inspect</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
           {/* Mobile Card View */}
           <div className="md:hidden space-y-3">
-            {filtered.map((insp) => (
-              <div
-                key={insp.id}
-                onClick={() => onSelectInspection(insp)}
-                className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-md space-y-3 cursor-pointer"
-              >
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
-                  <span className="font-mono text-xs text-blue-400 font-bold">{insp.code}</span>
-                  <div className="flex items-center gap-1.5">
-                    <StatusBadge status={insp.status} size="sm" />
+            {filtered.map((insp) => {
+              const reliability = calculateEvidenceReliability(insp, inspections);
+
+              return (
+                <div
+                  key={insp.id}
+                  onClick={() => onSelectInspection(insp)}
+                  className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-md space-y-3 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                    <span className="font-mono text-xs text-blue-400 font-bold">{insp.code}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded-full bg-blue-950 text-blue-300 font-mono text-[10px] font-bold border border-blue-800">
+                        Reliability: {reliability.score}%
+                      </span>
+                      <StatusBadge status={insp.status} size="sm" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">{insp.title}</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">{insp.equipmentName}</p>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/60">
+                    <span>Score: <strong className="text-white font-mono">{insp.score}%</strong></span>
+                    <span className="flex items-center gap-1 text-blue-400 font-medium">
+                      Open Checklist <ChevronRight className="w-4 h-4" />
+                    </span>
                   </div>
                 </div>
-
-                <div>
-                  <h3 className="text-sm font-semibold text-white">{insp.title}</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">{insp.equipmentName}</p>
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/60">
-                  <span>Score: <strong className="text-white font-mono">{insp.score}%</strong></span>
-                  <span className="flex items-center gap-1 text-blue-400 font-medium">
-                    Open Checklist <ChevronRight className="w-4 h-4" />
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

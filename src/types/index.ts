@@ -78,8 +78,13 @@ export interface EvidencePhoto {
   id: string;
   url: string;
   description: string;
+  caption?: string;
   timestamp: string;
   category?: string;
+  uploadId?: string;
+  s3Url?: string;
+  fileSize?: number;
+  storageType?: string;
 }
 
 export interface InspectionGpsLocation {
@@ -89,6 +94,7 @@ export interface InspectionGpsLocation {
   accuracy?: number;
   timestamp?: string;
   statusText?: string;
+  address?: string;
 }
 
 export interface Inspection {
@@ -133,9 +139,25 @@ export interface ConflictItem {
   serverValue: string;
   detectedAt: string;
   technicianName: string;
-  supervisorName: string;
+  supervisorName?: string;
   status: 'ACTIVE' | 'RESOLVED';
   resolution?: 'USE_LOCAL' | 'USE_SERVER' | 'MANUAL_MERGE';
+  // Preserved Semantic Conflict Fields
+  localUser?: string;
+  remoteUser?: string;
+  localTimestamp?: string;
+  remoteTimestamp?: string;
+  localNotes?: string;
+  remoteNotes?: string;
+  localEvidence?: EvidencePhoto[] | string;
+  remoteEvidence?: EvidencePhoto[] | string;
+  localGps?: InspectionGpsLocation | string;
+  remoteGps?: InspectionGpsLocation | string;
+  localOperationId?: string;
+  remoteOperationId?: string;
+  checklistItemId?: string;
+  checklistItemLabel?: string;
+  conflictType?: 'SEMANTIC_BUSINESS_CONFLICT' | 'CRDT_VERSION_CONFLICT';
 }
 
 export interface Equipment {
@@ -150,6 +172,52 @@ export interface Equipment {
   nextScheduledDate: string;
   healthScore: number;
   criticality: 'HIGH' | 'MEDIUM' | 'LOW';
+  installationDate?: string;
+  manufactureYear?: number;
+  missedInspectionsCount?: number;
+  failureHistoryCount?: number;
+  repeatedFailuresCount?: number;
+}
+
+export type SmartPriorityLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NORMAL';
+
+export interface EvidenceReliabilityScore {
+  score: number; // 0 - 100
+  factors: {
+    photo: { score: number; maxScore: number; details: string };
+    notes: { score: number; maxScore: number; details: string };
+    timestamp: { score: number; maxScore: number; details: string };
+    gps: { score: number; maxScore: number; details: string };
+    history: { score: number; maxScore: number; details: string };
+  };
+  reasons: string[];
+}
+
+export interface PredictiveAlert {
+  id: string;
+  equipmentId: string;
+  equipmentName: string;
+  equipmentTag: string;
+  facility: string;
+  summary: string;
+  historyTrend: string[];
+  risk: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NORMAL';
+  suggestedAttention: string;
+  detectedAt: string;
+  dataPointsCount: number;
+}
+
+export interface SmartPriorityAssessment {
+  priority: SmartPriorityLevel;
+  score: number; // 0 - 100
+  metrics: {
+    failureHistoryCount: number;
+    highestSeverity: string;
+    equipmentAgeYears: number;
+    daysOverdue: number;
+    repeatedFailuresCount: number;
+  };
+  reasons: string[];
 }
 
 export interface AuditLog {
@@ -164,6 +232,16 @@ export interface AuditLog {
   details: string;
   ipAddress: string;
   hash: string;
+  // Extended WA-1 Audit Fields
+  operationId?: string;
+  entityId?: string;
+  networkState?: 'ONLINE' | 'OFFLINE' | 'CELLULAR' | 'SYNCED' | 'DEGRADED';
+  previousValue?: string;
+  newValue?: string;
+  evidence?: string | EvidencePhoto[];
+  conflictStatus?: 'NONE' | 'SEMANTIC_CONFLICT' | 'RESOLVED' | 'CRDT_CONFLICT';
+  resolver?: string;
+  resolutionTime?: string;
 }
 
 export interface SyncStats {
@@ -212,28 +290,37 @@ export interface EvidenceMetadataRecord {
   id: string;
   inspectionId: string;
   checklistItemId?: string;
-  caption: string;
-  filename: string;
+  caption?: string;
+  filename?: string;
+  fileName?: string;
   dataUrl?: string;
-  mimeType: string;
-  sizeBytes: number;
+  mimeType?: string;
+  sizeBytes?: number;
+  fileSize?: number;
   capturedAt: string;
   gpsLat?: number;
   gpsLng?: number;
   gpsAccuracy?: number;
   syncState: SyncState;
+  uploadId?: string;
+  s3Url?: string;
+  description?: string;
 }
 
 export interface PendingOperationRecord {
   id: string;
-  type: 'UPDATE_INSPECTION' | 'SAVE_CHECKLIST' | 'ADD_NOTE' | 'ATTACH_EVIDENCE' | 'STATUS_CHANGE';
+  type: 'UPDATE_INSPECTION' | 'SAVE_CHECKLIST' | 'ADD_NOTE' | 'ATTACH_EVIDENCE' | 'STATUS_CHANGE' | 'UPDATE_CHECKLIST' | 'ADD_DEFECT' | 'CHANGE_STATUS' | 'CREATE_INSPECTION';
   entityId: string;
   entityType: 'INSPECTION' | 'CHECKLIST_ITEM' | 'NOTE' | 'EVIDENCE';
   payload: any;
   timestamp: string;
-  status: 'QUEUED' | 'IN_FLIGHT' | 'FAILED';
+  status: 'QUEUED' | 'IN_FLIGHT' | 'FAILED' | 'CONFLICT';
   retryCount: number;
   errorMessage?: string;
+  clientId?: string;
+  operationId?: string;
+  version?: number;
+  crdtUpdate?: string;
 }
 
 export interface SyncStatusRecord {
@@ -246,34 +333,10 @@ export interface SyncStatusRecord {
   errorMessage?: string;
 }
 
-export type OperationStatus = 'PENDING' | 'SYNCING' | 'SYNCED' | 'FAILED' | 'CONFLICT';
-export type OperationNetworkState = 'ONLINE' | 'OFFLINE';
-
-export interface Operation {
-  operationId: string;
-  clientId: string;
-  userId: string;
-  userName?: string;
-  entityId: string;
-  entityName?: string;
-  entityType: 'INSPECTION' | 'CHECKLIST_ITEM' | 'EQUIPMENT' | 'NOTE' | 'EVIDENCE' | 'DEFECT';
-  field: string;
-  oldValue: any;
-  newValue: any;
-  timestamp: string;
-  networkState: OperationNetworkState;
-  status: OperationStatus;
-  errorMessage?: string;
-  conflictDetails?: string;
-  retryCount?: number;
-  syncedAt?: string;
-}
-
 export interface SystemMetadataRecord {
   key: string;
   value: any;
   updatedAt: string;
   description?: string;
 }
-
 
