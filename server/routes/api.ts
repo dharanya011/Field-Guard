@@ -550,3 +550,64 @@ CRITICAL MANDATE: Provide a suggestion ONLY. Do NOT attempt to automatically res
     });
   }
 });
+
+// ==========================================
+// 17. GET /api/equipment
+// ==========================================
+apiRouter.get('/equipment', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  const equipment = dbStore.getAllEquipment();
+  res.json({
+    success: true,
+    count: equipment.length,
+    equipment
+  });
+});
+
+// ==========================================
+// 18. GET /api/tasks & POST /api/tasks
+// ==========================================
+apiRouter.get('/tasks', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  const tasks = dbStore.getAllTasks();
+  res.json({
+    success: true,
+    count: tasks.length,
+    tasks
+  });
+});
+
+apiRouter.post('/tasks', authenticateJWT, authorizeRoles('SUPERVISOR', 'ADMIN'), (req: AuthenticatedRequest, res) => {
+  const taskData = req.body;
+  if (!taskData || !taskData.title) {
+    res.status(400).json({ error: 'Task title is required.', code: 'INVALID_TASK' });
+    return;
+  }
+  const userId = req.user!.id;
+  const userName = req.user!.name;
+  const newTask = dbStore.createTask(taskData, userId, userName);
+  res.status(201).json({
+    success: true,
+    task: newTask
+  });
+});
+
+// ==========================================
+// 19. GET /api/risk-alerts
+// ==========================================
+apiRouter.get('/risk-alerts', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  const alerts = dbStore.getRiskAlerts();
+  res.json({
+    success: true,
+    alerts
+  });
+});
+
+// ==========================================
+// 20. GET /api/notifications
+// ==========================================
+apiRouter.get('/notifications', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  const notifications = dbStore.getNotifications();
+  res.json({
+    success: true,
+    notifications
+  });
+});

@@ -35,6 +35,20 @@ export interface DBEquipment {
   createdAt: string;
 }
 
+export interface DBTask {
+  id: string;
+  title: string;
+  equipmentId: string;
+  equipmentName: string;
+  assignedTechnicianId: string;
+  technicianName: string;
+  priority: string;
+  status: string;
+  dueDate: string;
+  instructions: string;
+  createdAt: string;
+}
+
 export interface DBChecklistItem {
   id: string;
   inspectionId: string;
@@ -179,6 +193,7 @@ class RelationalDatabaseStore {
   private usersMap = new Map<string, DBUser>();
   private rolesMap = new Map<string, DBRole>();
   private equipmentMap = new Map<string, DBEquipment>();
+  private tasksMap = new Map<string, DBTask>();
   private inspectionsMap = new Map<string, DBInspection>();
   private syncOpsList: DBSyncOperation[] = [];
   private conflictsMap = new Map<string, DBConflict>();
@@ -729,6 +744,84 @@ class RelationalDatabaseStore {
       publicUrl: `/uploads/${upload.uploadId}/${upload.fileName}`,
       completedAt: upload.updatedAt
     };
+  }
+
+  // --- ADDITIONAL ENTERPRISE DATA ACCESSORS ---
+
+  public getAllEquipment(): DBEquipment[] {
+    return Array.from(this.equipmentMap.values());
+  }
+
+  public getAllTasks(): DBTask[] {
+    return Array.from(this.tasksMap.values());
+  }
+
+  public createTask(task: Partial<DBTask>, userId: string, userName: string): DBTask {
+    const id = `task-${Date.now()}`;
+    const newRecord: DBTask = {
+      id,
+      title: task.title || 'Assigned Inspection Task',
+      equipmentId: task.equipmentId || 'eq-01',
+      equipmentName: task.equipmentName || 'Main Turbine Generator T-400',
+      assignedTechnicianId: task.assignedTechnicianId || 'usr-tech-01',
+      technicianName: task.technicianName || 'Alex Vance',
+      priority: task.priority || 'HIGH',
+      status: task.status || 'ASSIGNED',
+      dueDate: task.dueDate || new Date().toISOString().split('T')[0],
+      instructions: task.instructions || 'Execute full compliance inspection',
+      createdAt: new Date().toISOString()
+    };
+    this.tasksMap.set(id, newRecord);
+    this.addAuditEntry(userId, userName, 'SUPERVISOR', 'TASK_CREATED', 'TASK', id, `Assigned task ${id} to ${newRecord.technicianName}`);
+    return newRecord;
+  }
+
+  public getRiskAlerts() {
+    return [
+      {
+        id: 'alert-01',
+        equipmentId: 'eq-03',
+        equipmentName: 'Emergency Cryogenic Relief Valve RV-88',
+        riskLevel: 'CRITICAL',
+        title: 'Repeated Valve Seat Leakage',
+        summary: 'Pressure has declined during the last 3 inspections. Seal wear rate exceeds threshold.',
+        suggestedAction: 'Immediate supervisor sign-off and pressure testing required.',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'alert-02',
+        equipmentId: 'eq-02',
+        equipmentName: 'High-Pressure Steam Boiler B-12',
+        riskLevel: 'HIGH',
+        title: 'Casing Structural Fracture Warning',
+        summary: 'Hairline stress fracture recorded during ultrasonic sweep.',
+        suggestedAction: 'Schedule NDT dye penetrant examination within 24 hours.',
+        createdAt: new Date().toISOString()
+      }
+    ];
+  }
+
+  public getNotifications(): DBNotification[] {
+    return [
+      {
+        id: 'notif-01',
+        userId: 'usr-tech-01',
+        title: 'New Assignment',
+        message: 'High-Pressure Steam Boiler B-12 inspection assigned for today.',
+        type: 'INFO',
+        isRead: false,
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'notif-02',
+        userId: 'usr-sup-01',
+        title: 'CRDT Conflict Detected',
+        message: 'Ventilation AHU-09 has diverged draft values between field technicians.',
+        type: 'ALERT',
+        isRead: false,
+        createdAt: new Date().toISOString()
+      }
+    ];
   }
 }
 

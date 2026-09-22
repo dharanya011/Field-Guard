@@ -163,7 +163,7 @@ export const SyncCenterView: React.FC = () => {
           </div>
           <button
             onClick={handleResetData}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-rose-50 text-rose-700 text-xs font-semibold border border-slate-200 hover:border-rose-200 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-rose-50 text-rose-700 text-xs font-semibold border border-slate-200 hover:border-rose-200 transition cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset Local DB</span>
@@ -193,6 +193,97 @@ export const SyncCenterView: React.FC = () => {
             <span className="font-mono text-indigo-700 font-bold block">db.auditLogs</span>
             <p className="text-2xl font-bold font-mono text-slate-900">{tableCounts.auditLogs}</p>
             <p className="text-[11px] text-slate-500">Cryptographic audit events</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Advanced Research Architecture & Demo Modules (Section 22) */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-100 text-purple-800 border border-purple-200">
+              RESEARCH ARCHITECTURE MODULES
+            </span>
+            <h2 className="text-base font-bold text-slate-900 mt-1 tracking-tight font-display">
+              Advanced IoT, Edge AI & Peer-to-Peer Subsystems
+            </h2>
+          </div>
+          <span className="text-xs text-slate-500 font-mono">
+            Demo & Interface Status
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-900">MQTT-SN IoT Gateway</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                DEMO / NOT CONNECTED
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              MQTT for Sensor Networks gateway interface for telemetry stream ingestion.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-900">Bluetooth Device Sync</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                BLUETOOTH SYNC: DEMO MODE
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              Peer-to-peer Bluetooth Low Energy operation log exchange between field units.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-900">Wi-Fi Direct Synchronization</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                WI-FI DIRECT SYNC: DEMO MODE
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              Opportunistic ad-hoc local network sync between technicians without cell towers.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-900">Computer Vision Analysis</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-200 text-slate-800 border border-slate-300">
+                VISION ANALYSIS: MODEL NOT CONFIGURED
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              Evidence photo defect detection & weld stress fracture analysis pipeline.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-900">UAV / Drone Inspection Import</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-blue-100 text-blue-900 border border-blue-200">
+                DRONE INTEGRATION: DEMO / IMPORT MODE
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              Aerial thermal camera & lidar telemetry import for solar/wind/stack inspections.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-900">Predictive Maintenance Model</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-100 text-purple-900 border border-purple-200">
+                RULE-BASED DEMO
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              Vibration, temperature, and motor current decay rate remaining-useful-life engine.
+            </p>
           </div>
         </div>
       </div>
