@@ -9,7 +9,10 @@ import type {
   EvidenceMetadataRecord,
   PendingOperationRecord,
   SyncStatusRecord,
-  SystemMetadataRecord
+  SystemMetadataRecord,
+  Operation,
+  OperationStatus,
+  OperationNetworkState
 } from '../types';
 
 export class WA1Database extends Dexie {
@@ -18,6 +21,7 @@ export class WA1Database extends Dexie {
   notes!: Table<InspectionNoteRecord, string>;
   evidenceMetadata!: Table<EvidenceMetadataRecord, string>;
   pendingOperations!: Table<PendingOperationRecord, string>;
+  operations!: Table<Operation, string>;
   syncStatus!: Table<SyncStatusRecord, string>;
   systemMetadata!: Table<SystemMetadataRecord, string>;
   equipment!: Table<Equipment, string>;
@@ -38,6 +42,19 @@ export class WA1Database extends Dexie {
       notes: 'id, inspectionId, authorId, syncState, timestamp',
       evidenceMetadata: 'id, inspectionId, checklistItemId, syncState, capturedAt',
       pendingOperations: 'id, type, entityId, status, timestamp',
+      syncStatus: 'id, entityType, entityId, status',
+      systemMetadata: 'key, updatedAt',
+      equipment: 'id, tag, facility, status, criticality',
+      auditLogs: 'id, timestamp, userId, action, targetType',
+      conflicts: 'id, inspectionId, status'
+    });
+    this.version(3).stores({
+      inspections: 'id, code, equipmentId, assignedTechnicianId, status, syncState, riskLevel, scheduledDate, lastModified',
+      inspectionItems: 'id, inspectionId, category, title, status, syncState, timestamp',
+      notes: 'id, inspectionId, authorId, syncState, timestamp',
+      evidenceMetadata: 'id, inspectionId, checklistItemId, syncState, capturedAt',
+      pendingOperations: 'id, type, entityId, status, timestamp',
+      operations: 'operationId, clientId, userId, entityId, entityType, field, networkState, status, timestamp',
       syncStatus: 'id, entityType, entityId, status',
       systemMetadata: 'key, updatedAt',
       equipment: 'id, tag, facility, status, criticality',
@@ -115,10 +132,96 @@ export const initialEquipments: Equipment[] = [
     nextScheduledDate: '2026-09-26',
     healthScore: 89,
     criticality: 'MEDIUM'
+  },
+  {
+    id: 'eq-25',
+    name: 'Fire Extinguisher #25',
+    tag: 'FE-025',
+    category: 'Life Safety Systems',
+    facility: 'Alpha Energy Sector 4',
+    location: 'Corridor B - Emergency Station 2',
+    status: 'NEEDS_MAINTENANCE',
+    lastInspectionDate: '2026-09-20',
+    nextScheduledDate: '2026-09-22',
+    healthScore: 68,
+    criticality: 'HIGH'
   }
 ];
 
 export const initialInspections: Inspection[] = [
+  {
+    id: 'insp-25',
+    code: 'INS-2026-0025',
+    title: 'Monthly Safety & Fire Suppression Audit',
+    equipmentId: 'eq-25',
+    equipmentName: 'Fire Extinguisher #25',
+    facility: 'Alpha Energy Sector 4',
+    zone: 'Corridor B - Emergency Station 2',
+    assignedTechnicianId: 'usr-tech-01',
+    technicianName: 'Alex Rivera (Technician A)',
+    supervisorId: 'usr-sup-01',
+    supervisorName: 'Marcus Reid (Field Director)',
+    status: 'IN_PROGRESS',
+    syncState: 'PENDING',
+    riskLevel: 'HIGH',
+    score: 50,
+    scheduledDate: '2026-09-22',
+    offlineDraft: true,
+    version: 1,
+    lastModified: '2026-09-22T09:40:00Z',
+    checklist: [
+      {
+        id: 'chk-fe-1',
+        category: 'Pressure & Gauge',
+        title: 'Pressure Gauge',
+        requirement: 'Pointer must rest firmly within green operable band (195 psi +/- 10%)',
+        status: 'FAIL',
+        measuredValue: '135 psi',
+        toleranceRange: '185-205 psi',
+        failReason: 'Pressure below green recharge threshold',
+        failNotes: 'Gauge reading 135 psi, cylinder depressurized below operational limits',
+        failSeverity: 'HIGH'
+      },
+      {
+        id: 'chk-fe-2',
+        category: 'Physical Enclosure',
+        title: 'Physical Damage',
+        requirement: 'Cylinder body, nozzle, and horn free of dents, rust, and chemical corrosion',
+        status: 'PASS',
+        notes: 'Cylinder exterior clean, no visible metal fatigue or nozzle obstruction'
+      },
+      {
+        id: 'chk-fe-3',
+        category: 'Tamper Evident',
+        title: 'Safety Seal',
+        requirement: 'Tamper indicator wire and pull-pin intact with unbroken inspection tag',
+        status: 'FAIL',
+        failReason: 'Plastic tamper seal severed or missing',
+        failNotes: 'Tamper wire snapped; locking pull-pin loose in cradle',
+        failSeverity: 'CRITICAL'
+      },
+      {
+        id: 'chk-fe-4',
+        category: 'Certification',
+        title: 'Expiry Date',
+        requirement: 'Annual hydrostatic test and recharge date valid and clearly legible',
+        status: 'PASS',
+        notes: 'Certified tag valid through November 2026'
+      }
+    ],
+    defects: [
+      {
+        id: 'def-fe-1',
+        severity: 'CRITICAL',
+        title: 'Broken Safety Seal - Fire Extinguisher #25',
+        description: 'Tamper indicator wire was broken, leaving pull pin unsecured.',
+        recommendedAction: 'Lockout unit, replace tamper seal and re-verify pin tension.',
+        timestamp: '2026-09-22T09:40:00Z',
+        resolved: false
+      }
+    ],
+    generalNotes: 'Corridor B station inspection completed offline at 09:40. Defect logged for broken safety seal.'
+  },
   {
     id: 'insp-101',
     code: 'INS-2026-0891',
@@ -554,17 +657,136 @@ export async function initDatabase() {
         await db.syncStatus.bulkAdd(initialSyncStatus);
       }
     }
+
+    // Seed operations if empty
+    const opCount = await db.operations.count();
+    if (opCount === 0) {
+      await db.operations.bulkAdd(initialOperations);
+    }
   } catch (err) {
     console.error('Dexie IndexedDB initialization warning:', err);
   }
 }
 
+export const initialOperations: Operation[] = [
+  {
+    operationId: 'OP-8F21A9',
+    clientId: 'client-wa1-alpha',
+    userId: 'usr-tech-01',
+    userName: 'Technician A',
+    entityId: 'insp-25',
+    entityName: 'Fire Extinguisher #25',
+    entityType: 'CHECKLIST_ITEM',
+    field: 'Safety Seal',
+    oldValue: 'PASS',
+    newValue: 'FAIL',
+    timestamp: '09:40',
+    networkState: 'OFFLINE',
+    status: 'PENDING'
+  },
+  {
+    operationId: 'OP-4D12C8',
+    clientId: 'client-wa1-alpha',
+    userId: 'usr-tech-01',
+    userName: 'Technician A',
+    entityId: 'insp-25',
+    entityName: 'Fire Extinguisher #25',
+    entityType: 'CHECKLIST_ITEM',
+    field: 'Pressure Gauge',
+    oldValue: '195 psi',
+    newValue: '135 psi',
+    timestamp: '09:41',
+    networkState: 'OFFLINE',
+    status: 'PENDING'
+  },
+  {
+    operationId: 'OP-7E43D1',
+    clientId: 'client-wa1-alpha',
+    userId: 'usr-tech-01',
+    userName: 'Technician A',
+    entityId: 'insp-101',
+    entityName: 'High-Pressure Steam Boiler B-12',
+    entityType: 'CHECKLIST_ITEM',
+    field: 'Safety Relief Valve',
+    oldValue: 'NOT_CHECKED',
+    newValue: 'PASS',
+    timestamp: '09:35',
+    networkState: 'ONLINE',
+    status: 'SYNCING'
+  },
+  {
+    operationId: 'OP-1C49F0',
+    clientId: 'client-wa1-alpha',
+    userId: 'usr-tech-01',
+    userName: 'Technician A',
+    entityId: 'insp-103',
+    entityName: 'Ventilation Fan Array AHU-09',
+    entityType: 'INSPECTION',
+    field: 'Status',
+    oldValue: 'IN_PROGRESS',
+    newValue: 'PASSED',
+    timestamp: '08:15',
+    networkState: 'ONLINE',
+    status: 'SYNCED',
+    syncedAt: '08:16'
+  },
+  {
+    operationId: 'OP-2E90B4',
+    clientId: 'client-wa1-alpha',
+    userId: 'usr-tech-01',
+    userName: 'Technician A',
+    entityId: 'insp-103',
+    entityName: 'Ventilation Fan Array AHU-09',
+    entityType: 'CHECKLIST_ITEM',
+    field: 'Belt Tension & Alignment',
+    oldValue: 'WARNING',
+    newValue: 'PASS',
+    timestamp: '08:12',
+    networkState: 'ONLINE',
+    status: 'SYNCED',
+    syncedAt: '08:16'
+  },
+  {
+    operationId: 'OP-5D82A7',
+    clientId: 'client-wa1-alpha',
+    userId: 'usr-tech-01',
+    userName: 'Technician A',
+    entityId: 'insp-102',
+    entityName: 'Emergency Cryogenic Relief Valve RV-88',
+    entityType: 'EVIDENCE',
+    field: 'Defect Evidence Photo',
+    oldValue: 'None',
+    newValue: 'photo-valve-frost-01.jpg',
+    timestamp: '09:12',
+    networkState: 'OFFLINE',
+    status: 'FAILED',
+    errorMessage: 'Gateway Timeout 504: Payload transmission interrupted during underground traversal',
+    retryCount: 2
+  },
+  {
+    operationId: 'OP-9A10E4',
+    clientId: 'client-wa1-alpha',
+    userId: 'usr-tech-01',
+    userName: 'Technician A',
+    entityId: 'insp-101',
+    entityName: 'High-Pressure Steam Boiler B-12',
+    entityType: 'CHECKLIST_ITEM',
+    field: 'Burner Flame Sensor',
+    oldValue: 'PASS',
+    newValue: 'FAIL',
+    timestamp: '09:28',
+    networkState: 'ONLINE',
+    status: 'CONFLICT',
+    conflictDetails: 'Supervisor Marcus Reid updated status to WARNING concurrently at 09:27'
+  }
+];
+
 export async function getSchemaVersion(): Promise<number> {
   try {
     const meta = await db.systemMetadata.get('schemaVersion');
-    return meta ? meta.value : 2;
+    return meta ? meta.value : 3;
   } catch {
-    return 2;
+    return 3;
   }
 }
 
@@ -576,6 +798,7 @@ export async function getOfflineDbSummary() {
       notesCount,
       evidenceCount,
       pendingOpsCount,
+      operationsCount,
       conflictsCount
     ] = await Promise.all([
       db.inspections.count(),
@@ -583,6 +806,7 @@ export async function getOfflineDbSummary() {
       db.notes.count(),
       db.evidenceMetadata.count(),
       db.pendingOperations.count(),
+      db.operations.count(),
       db.conflicts.count()
     ]);
 
@@ -595,18 +819,20 @@ export async function getOfflineDbSummary() {
       notesCount,
       evidenceCount,
       pendingOpsCount,
+      operationsCount,
       conflictsCount,
       databaseName: db.name
     };
   } catch (err) {
     console.error('Error fetching Dexie summary:', err);
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       inspectionsCount: 0,
       itemsCount: 0,
       notesCount: 0,
       evidenceCount: 0,
       pendingOpsCount: 0,
+      operationsCount: 0,
       conflictsCount: 0,
       databaseName: 'WA1FieldInspectionDB'
     };

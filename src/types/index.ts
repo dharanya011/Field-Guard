@@ -246,10 +246,34 @@ export interface SyncStatusRecord {
   errorMessage?: string;
 }
 
+export type OperationStatus = 'PENDING' | 'SYNCING' | 'SYNCED' | 'FAILED' | 'CONFLICT';
+export type OperationNetworkState = 'ONLINE' | 'OFFLINE';
+
+export interface Operation {
+  operationId: string;
+  clientId: string;
+  userId: string;
+  userName?: string;
+  entityId: string;
+  entityName?: string;
+  entityType: 'INSPECTION' | 'CHECKLIST_ITEM' | 'EQUIPMENT' | 'NOTE' | 'EVIDENCE' | 'DEFECT';
+  field: string;
+  oldValue: any;
+  newValue: any;
+  timestamp: string;
+  networkState: OperationNetworkState;
+  status: OperationStatus;
+  errorMessage?: string;
+  conflictDetails?: string;
+  retryCount?: number;
+  syncedAt?: string;
+}
+
 export interface SystemMetadataRecord {
   key: string;
   value: any;
   updatedAt: string;
   description?: string;
 }
+
 
