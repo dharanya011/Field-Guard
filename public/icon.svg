@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#0f172a" />
+  <circle cx="256" cy="256" r="180" stroke="#3b82f6" stroke-width="8" stroke-dasharray="16 12" opacity="0.6"/>
+  <!-- Hexagon shield -->
+  <path d="M256 96L376 164V276L256 348L136 276V164L256 96Z" stroke="#0ea5e9" stroke-width="12" fill="#1e293b" fill-opacity="0.9" stroke-linejoin="round"/>
+  <!-- Safety Check & Radar lines -->
+  <path d="M190 220L235 265L325 175" stroke="#10b981" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- WA-1 typography badge -->
+  <rect x="180" y="370" width="152" height="42" rx="8" fill="#3b82f6"/>
+  <text x="256" y="399" font-family="system-ui, sans-serif" font-weight="900" font-size="24" fill="#ffffff" text-anchor="middle" letter-spacing="3">WA-1</text>
+</svg>

@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "WA-1 Field Inspection Platform",
+  "short_name": "WA-1 Field",
+  "description": "WA-1 Offline-First Collaborative Field Inspection Platform",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
