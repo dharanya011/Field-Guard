@@ -72,33 +72,34 @@ export const SyncCenterView: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-sky-50 via-blue-50/40 to-white border border-sky-200 shadow-sm">
+      {/* 1. Header Row: Title & Subtitle on left, Action Buttons on right */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-sky-100 text-sky-800 border border-sky-200">
-              OFFLINE PERSISTENCE ENGINE
-            </span>
-            <span className="text-xs text-slate-500 font-mono">
-              Dexie.js + IndexedDB v1.0
-            </span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight font-display">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight font-display">
             Local Storage & Sync Gateway
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
-            Inspections, sensor telemetry, and defect logs are stored natively inside your device's browser database using IndexedDB. Changes sync bidirectionally when connection to the node is restored.
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Inspections, sensor telemetry, and defect logs are stored natively inside your device's browser database using Dexie IndexedDB.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto">
           <button
             onClick={triggerManualSync}
             disabled={!isOnline || syncStatus === 'SYNCING'}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-xs shadow-xs transition"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-xs shadow-2xs active:scale-95 transition cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
             <span>{syncStatus === 'SYNCING' ? 'Syncing...' : 'Trigger Full Sync'}</span>
+          </button>
+
+          <button
+            onClick={handleResetData}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition cursor-pointer"
+            title="Reset database to demo seed"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
+            <span>Reset Demo DB</span>
           </button>
         </div>
       </div>

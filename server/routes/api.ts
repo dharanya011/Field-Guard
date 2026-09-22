@@ -179,6 +179,91 @@ apiRouter.put('/inspections/:id', authenticateJWT, authorizePermission('canPerfo
 });
 
 // ==========================================
+// 5.1 DELETE /api/inspections/:id
+// ==========================================
+apiRouter.delete('/inspections/:id', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  if (!id) {
+    res.status(400).json({ error: 'Inspection ID is required.', code: 'MISSING_ID' });
+    return;
+  }
+
+  const userId = req.user!.id;
+  const userName = req.user!.name;
+  const userRole = req.user!.role;
+
+  try {
+    const inspection = dbStore.getInspectionById(id);
+    if (!inspection) {
+      res.status(404).json({ error: `Inspection ${id} not found in database.`, code: 'NOT_FOUND' });
+      return;
+    }
+
+    // Role-based permission: Admin and Supervisor can delete any inspection; Technician can delete their own
+    if (userRole === 'TECHNICIAN' && inspection.assignedTechnicianId !== userId) {
+      res.status(403).json({
+        error: 'Forbidden: Technicians can only delete their own inspections.',
+        code: 'FORBIDDEN'
+      });
+      return;
+    }
+
+    dbStore.deleteInspection(id, userId, userName, userRole);
+    res.json({
+      success: true,
+      message: `Inspection ${inspection.code} (${inspection.equipmentName}) deleted successfully from database.`
+    });
+  } catch (err: unknown) {
+    const error = err as Error;
+    res.status(500).json({ error: error.message || 'Failed to delete inspection.', code: 'DELETE_FAILED' });
+  }
+});
+
+// ==========================================
+// 5.2 GET /api/dashboard/stats
+// ==========================================
+apiRouter.get('/dashboard/stats', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  const userId = req.user!.id;
+  const userRole = req.user!.role;
+
+  const allInspections = dbStore.getAllInspections();
+  const allEquipment = dbStore.getAllEquipment();
+  const allConflicts = dbStore.getAllConflicts();
+  const allTasks = dbStore.getAllTasks();
+
+  const userInspections = userRole === 'TECHNICIAN'
+    ? allInspections.filter(i => i.assignedTechnicianId === userId || i.technicianName.includes(req.user!.name.split(' ')[0]))
+    : allInspections;
+
+  const userTasks = userRole === 'TECHNICIAN'
+    ? allTasks.filter(t => t.assignedTechnicianId === userId)
+    : allTasks;
+
+  const passed = userInspections.filter(i => i.status === 'PASSED').length;
+  const failed = userInspections.filter(i => i.status === 'FAILED').length;
+  const inProgress = userInspections.filter(i => i.status === 'IN_PROGRESS' || i.status === 'DRAFT').length;
+  const pendingReview = userInspections.filter(i => i.status === 'PENDING_REVIEW').length;
+  const activeConflicts = allConflicts.filter(c => c.status === 'ACTIVE').length;
+
+  res.json({
+    success: true,
+    stats: {
+      totalInspections: userInspections.length,
+      passed,
+      failed,
+      inProgress,
+      pendingReview,
+      activeConflicts,
+      assignedTasks: userTasks.length,
+      equipmentCount: allEquipment.length,
+      complianceRate: userInspections.length > 0 
+        ? Math.round(userInspections.reduce((sum, i) => sum + (i.score || 0), 0) / userInspections.length)
+        : 0
+    }
+  });
+});
+
+// ==========================================
 // 6. POST /api/sync/push
 // ==========================================
 apiRouter.post('/sync/push', authenticateJWT, (req: AuthenticatedRequest, res) => {
@@ -408,7 +493,7 @@ apiRouter.post('/media/upload/complete', authenticateJWT, (req: AuthenticatedReq
 });
 
 // ==========================================
-// 14. GET /api/ai/status
+// 14. GET /api/ai/status & GET /api/ai/health
 // ==========================================
 apiRouter.get('/ai/status', (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -416,6 +501,20 @@ apiRouter.get('/ai/status', (req, res) => {
 
   res.json({
     success: true,
+    gemini: isConfigured,
+    geminiConfigured: isConfigured,
+    status: isConfigured ? 'GEMINI AI — ONLINE' : 'GEMINI NOT CONFIGURED',
+    model: 'gemini-3.8-flash'
+  });
+});
+
+apiRouter.get('/ai/health', (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const isConfigured = !!apiKey && apiKey.trim().length > 0;
+
+  res.json({
+    gemini: isConfigured,
+    fallback: true,
     geminiConfigured: isConfigured,
     status: isConfigured ? 'GEMINI AI — ONLINE' : 'GEMINI NOT CONFIGURED',
     model: 'gemini-3.8-flash'
@@ -423,58 +522,51 @@ apiRouter.get('/ai/status', (req, res) => {
 });
 
 // ==========================================
-// 15. POST /api/ai/query
+// 15. POST /api/ai/chat & POST /api/ai/query
 // ==========================================
-apiRouter.post('/ai/query', authenticateJWT, async (req: AuthenticatedRequest, res) => {
-  const { query, context } = req.body;
+apiRouter.post('/ai/chat', authenticateJWT, async (req: AuthenticatedRequest, res) => {
+  const { message, conversationId, history } = req.body;
 
-  if (!query || typeof query !== 'string') {
+  if (!message || typeof message !== 'string') {
+    res.status(400).json({ error: 'Message string is required.', code: 'INVALID_MESSAGE' });
+    return;
+  }
+
+  const user = req.user!;
+  const result = await processAiChat({
+    message,
+    conversationId,
+    history,
+    user
+  });
+
+  res.json(result);
+});
+
+apiRouter.post('/ai/query', authenticateJWT, async (req: AuthenticatedRequest, res) => {
+  const { query, message, context, history } = req.body;
+  const textQuery = query || message;
+
+  if (!textQuery || typeof textQuery !== 'string') {
     res.status(400).json({ error: 'Query string parameter is required.', code: 'INVALID_QUERY' });
     return;
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey.trim().length === 0) {
-    res.json({
-      success: false,
-      status: 'GEMINI NOT CONFIGURED',
-      geminiConfigured: false,
-      message: 'GEMINI NOT CONFIGURED: GEMINI_API_KEY environment variable is not defined.'
-    });
-    return;
-  }
+  const user = req.user!;
+  const result = await processAiChat({
+    message: textQuery,
+    history,
+    user
+  });
 
-  try {
-    const ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-    });
-
-    const promptText = `User Query: "${query}"\n${context ? `Context: ${JSON.stringify(context)}` : ''}`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: promptText,
-      config: {
-        systemInstruction: 'You are the WA-1 Enterprise Field Inspection AI Assistant. Provide helpful, accurate engineering advice according to ISO 10816, NFPA 59A, OSHA 1910, and industrial equipment maintenance standards. Keep responses professional, clear, and scannable.'
-      }
-    });
-
-    res.json({
-      success: true,
-      status: 'GEMINI AI — ONLINE',
-      geminiConfigured: true,
-      text: response.text || 'Analysis completed.'
-    });
-  } catch (err: unknown) {
-    const error = err as Error;
-    console.error('Gemini API Error:', error);
-    res.status(500).json({
-      error: `Gemini API invocation failed: ${error.message}`,
-      code: 'GEMINI_API_ERROR',
-      status: 'GEMINI AI — ERROR'
-    });
-  }
+  res.json({
+    success: result.success,
+    status: result.geminiConfigured ? 'GEMINI AI — ONLINE' : 'GEMINI NOT CONFIGURED',
+    geminiConfigured: result.geminiConfigured,
+    text: result.message,
+    message: result.message,
+    conversationId: result.conversationId
+  });
 });
 
 // ==========================================
@@ -552,7 +644,24 @@ CRITICAL MANDATE: Provide a suggestion ONLY. Do NOT attempt to automatically res
 });
 
 // ==========================================
-// 17. GET /api/equipment
+// 1.1 GET /api/auth/me & POST /api/auth/logout
+// ==========================================
+apiRouter.get('/auth/me', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  res.json({
+    authenticated: true,
+    user: req.user
+  });
+});
+
+apiRouter.post('/auth/logout', authenticateJWT, (_req: AuthenticatedRequest, res) => {
+  res.json({
+    success: true,
+    message: 'Logged out successfully.'
+  });
+});
+
+// ==========================================
+// 17. GET /api/equipment, POST, PUT, DELETE
 // ==========================================
 apiRouter.get('/equipment', authenticateJWT, (req: AuthenticatedRequest, res) => {
   const equipment = dbStore.getAllEquipment();
@@ -563,8 +672,58 @@ apiRouter.get('/equipment', authenticateJWT, (req: AuthenticatedRequest, res) =>
   });
 });
 
+apiRouter.post('/equipment', authenticateJWT, authorizeRoles('SUPERVISOR', 'ADMIN'), (req: AuthenticatedRequest, res) => {
+  const data = req.body;
+  if (!data || !data.name || !data.tag) {
+    res.status(400).json({ error: 'Asset name and tag are required.', code: 'INVALID_EQUIPMENT' });
+    return;
+  }
+  const userId = req.user!.id;
+  const userName = req.user!.name;
+  const newEq = dbStore.createEquipment(data, userId, userName);
+  res.status(201).json({
+    success: true,
+    message: `Asset ${newEq.name} (${newEq.tag}) registered successfully.`,
+    equipment: newEq
+  });
+});
+
+apiRouter.put('/equipment/:id', authenticateJWT, authorizeRoles('SUPERVISOR', 'ADMIN'), (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const updates = req.body;
+  const userId = req.user!.id;
+  const userName = req.user!.name;
+  try {
+    const updated = dbStore.updateEquipment(id, updates, userId, userName);
+    res.json({
+      success: true,
+      message: `Asset ${updated.name} updated.`,
+      equipment: updated
+    });
+  } catch (err: unknown) {
+    const error = err as Error;
+    res.status(404).json({ error: error.message, code: 'NOT_FOUND' });
+  }
+});
+
+apiRouter.delete('/equipment/:id', authenticateJWT, authorizeRoles('ADMIN'), (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const userId = req.user!.id;
+  const userName = req.user!.name;
+  try {
+    dbStore.deleteEquipment(id, userId, userName);
+    res.json({
+      success: true,
+      message: `Asset ${id} deleted.`
+    });
+  } catch (err: unknown) {
+    const error = err as Error;
+    res.status(404).json({ error: error.message, code: 'NOT_FOUND' });
+  }
+});
+
 // ==========================================
-// 18. GET /api/tasks & POST /api/tasks
+// 18. GET /api/tasks, POST, PUT, DELETE
 // ==========================================
 apiRouter.get('/tasks', authenticateJWT, (req: AuthenticatedRequest, res) => {
   const tasks = dbStore.getAllTasks();
@@ -590,6 +749,39 @@ apiRouter.post('/tasks', authenticateJWT, authorizeRoles('SUPERVISOR', 'ADMIN'),
   });
 });
 
+apiRouter.put('/tasks/:id', authenticateJWT, authorizeRoles('SUPERVISOR', 'ADMIN'), (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const updates = req.body;
+  const userId = req.user!.id;
+  const userName = req.user!.name;
+  try {
+    const updated = dbStore.updateTask(id, updates, userId, userName);
+    res.json({
+      success: true,
+      task: updated
+    });
+  } catch (err: unknown) {
+    const error = err as Error;
+    res.status(404).json({ error: error.message, code: 'NOT_FOUND' });
+  }
+});
+
+apiRouter.delete('/tasks/:id', authenticateJWT, authorizeRoles('SUPERVISOR', 'ADMIN'), (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const userId = req.user!.id;
+  const userName = req.user!.name;
+  try {
+    dbStore.deleteTask(id, userId, userName);
+    res.json({
+      success: true,
+      message: `Task ${id} deleted.`
+    });
+  } catch (err: unknown) {
+    const error = err as Error;
+    res.status(404).json({ error: error.message, code: 'NOT_FOUND' });
+  }
+});
+
 // ==========================================
 // 19. GET /api/risk-alerts
 // ==========================================
@@ -602,7 +794,7 @@ apiRouter.get('/risk-alerts', authenticateJWT, (req: AuthenticatedRequest, res) 
 });
 
 // ==========================================
-// 20. GET /api/notifications
+// 20. GET /api/notifications & POST read
 // ==========================================
 apiRouter.get('/notifications', authenticateJWT, (req: AuthenticatedRequest, res) => {
   const notifications = dbStore.getNotifications();
@@ -610,4 +802,206 @@ apiRouter.get('/notifications', authenticateJWT, (req: AuthenticatedRequest, res
     success: true,
     notifications
   });
+});
+
+apiRouter.post('/notifications/:id/read', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const marked = dbStore.markNotificationRead(id);
+  res.json({
+    success: marked
+  });
+});
+
+// ==========================================
+// 21. GET /api/analytics
+// ==========================================
+apiRouter.get('/analytics', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  const analytics = dbStore.getAnalytics();
+  res.json({
+    success: true,
+    analytics
+  });
+});
+
+// ==========================================
+// 22. USER MANAGEMENT (Admin only)
+// ==========================================
+apiRouter.get('/admin/users', authenticateJWT, authorizeRoles('ADMIN'), (req: AuthenticatedRequest, res) => {
+  const users = dbStore.getAllUsers();
+  res.json({
+    success: true,
+    users
+  });
+});
+
+apiRouter.post('/admin/users', authenticateJWT, authorizeRoles('ADMIN'), (req: AuthenticatedRequest, res) => {
+  const userData = req.body;
+  if (!userData || !userData.name || !userData.email || !userData.role) {
+    res.status(400).json({ error: 'Name, email, and role are required.', code: 'INVALID_USER_DATA' });
+    return;
+  }
+  const adminUserId = req.user!.id;
+  const adminUserName = req.user!.name;
+  const newUser = dbStore.createUser(userData, adminUserId, adminUserName);
+  res.status(201).json({
+    success: true,
+    message: `User ${newUser.name} created successfully.`,
+    user: newUser
+  });
+});
+
+apiRouter.put('/admin/users/:id', authenticateJWT, authorizeRoles('ADMIN'), (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const updates = req.body;
+  const adminUserId = req.user!.id;
+  const adminUserName = req.user!.name;
+  try {
+    const updated = dbStore.updateUser(id, updates, adminUserId, adminUserName);
+    res.json({
+      success: true,
+      message: `User ${updated.name} updated.`,
+      user: updated
+    });
+  } catch (err: unknown) {
+    const error = err as Error;
+    res.status(404).json({ error: error.message, code: 'NOT_FOUND' });
+  }
+});
+
+apiRouter.delete('/admin/users/:id', authenticateJWT, authorizeRoles('ADMIN'), (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const adminUserId = req.user!.id;
+  const adminUserName = req.user!.name;
+  try {
+    dbStore.deleteUser(id, adminUserId, adminUserName);
+    res.json({
+      success: true,
+      message: `User ${id} deleted.`
+    });
+  } catch (err: unknown) {
+    const error = err as Error;
+    res.status(404).json({ error: error.message, code: 'NOT_FOUND' });
+  }
+});
+
+// ==========================================
+// 23. ADMIN SETTINGS (Admin only)
+// ==========================================
+apiRouter.get('/admin/settings', authenticateJWT, authorizeRoles('ADMIN'), (req: AuthenticatedRequest, res) => {
+  const settings = dbStore.getAdminSettings();
+  res.json({
+    success: true,
+    settings
+  });
+});
+
+apiRouter.post('/admin/settings', authenticateJWT, authorizeRoles('ADMIN'), (req: AuthenticatedRequest, res) => {
+  const settings = req.body;
+  const userId = req.user!.id;
+  const userName = req.user!.name;
+  const updated = dbStore.updateAdminSettings(settings, userId, userName);
+  res.json({
+    success: true,
+    message: 'System settings updated successfully.',
+    settings: updated
+  });
+});
+
+// ==========================================
+// 24. INSPECTION SIGN-OFF & APPROVAL (Supervisor / Admin)
+// ==========================================
+apiRouter.post('/inspections/:id/approve', authenticateJWT, authorizeRoles('SUPERVISOR', 'ADMIN'), (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const { status, remarks } = req.body;
+  const userId = req.user!.id;
+  const userName = req.user!.name;
+  const userRole = req.user!.role;
+
+  try {
+    const inspection = dbStore.getInspectionById(id);
+    if (!inspection) {
+      res.status(404).json({ error: `Inspection ${id} not found.`, code: 'NOT_FOUND' });
+      return;
+    }
+
+    const updated = dbStore.updateInspection(id, {
+      status: status || 'PASSED',
+      signatures: {
+        ...inspection.signatures,
+        supervisor: {
+          name: userName,
+          timestamp: new Date().toISOString()
+        }
+      },
+      completedDate: new Date().toISOString(),
+      generalNotes: remarks ? `${inspection.generalNotes || ''}\n[Supervisor Sign-off (${userName})]: ${remarks}` : inspection.generalNotes
+    }, userId, userName, userRole);
+
+    res.json({
+      success: true,
+      message: `Inspection ${inspection.code} approved with status ${updated.status}.`,
+      inspection: updated
+    });
+  } catch (err: unknown) {
+    const error = err as Error;
+    res.status(500).json({ error: error.message, code: 'APPROVAL_FAILED' });
+  }
+});
+
+// ==========================================
+// 25. AI ASSISTANT ENDPOINTS (Gemini + Local Fallback)
+// ==========================================
+import { processAiChat } from '../ai/assistant';
+
+apiRouter.get('/ai/health', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const configured = Boolean(apiKey && apiKey.trim().length > 0);
+  res.json({
+    success: true,
+    status: configured ? 'ONLINE' : 'CONFIGURATION_ERROR',
+    geminiConfigured: configured,
+    model: 'gemini-3.8-flash',
+    timestamp: new Date().toISOString()
+  });
+});
+
+apiRouter.get('/ai/status', authenticateJWT, (req: AuthenticatedRequest, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const configured = Boolean(apiKey && apiKey.trim().length > 0);
+  res.json({
+    success: true,
+    geminiOnline: configured,
+    statusBadge: configured ? 'GEMINI AI — ONLINE' : 'GEMINI AI — CONFIGURATION ERROR',
+    message: configured ? 'Gemini AI API connected successfully.' : 'GEMINI_API_KEY environment variable is not configured.'
+  });
+});
+
+apiRouter.post('/ai/chat', authenticateJWT, async (req: AuthenticatedRequest, res) => {
+  const { message, conversationId, history } = req.body;
+  if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    res.status(400).json({ error: 'Message parameter is required.', code: 'INVALID_MESSAGE' });
+    return;
+  }
+
+  try {
+    const user = req.user!;
+    const response = await processAiChat({
+      message,
+      conversationId,
+      history,
+      user
+    });
+
+    res.json(response);
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.error('AI chat endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gemini AI is temporarily unavailable because the configured API quota has been reached. Supported FIELD GUARD offline assistance is still available.',
+      source: 'LOCAL_FALLBACK',
+      geminiConfigured: false,
+      role: req.user?.role || 'TECHNICIAN'
+    });
+  }
 });

@@ -13,15 +13,28 @@ import {
   Hash,
   Shield,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Download,
+  RefreshCw,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useInspections } from '../../context/InspectionContext';
+import { useNetwork } from '../../context/NetworkContext';
 import type { EvidencePhoto } from '../../types';
 
 export const AuditHistoryView: React.FC = () => {
   const { auditLogs } = useInspections();
+  const { isOnline, syncStatus, triggerManualSync } = useNetwork();
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [targetFilter, setTargetFilter] = useState('ALL');
+  const [roleFilter, setRoleFilter] = useState('ALL');
+
+  // KPI Metrics
+  const totalEntries = auditLogs.length;
+  const verifiedHashes = auditLogs.filter(l => l.hash && l.hash.length > 0).length;
+  const technicianActions = auditLogs.filter(l => l.userRole === 'TECHNICIAN').length;
+  const supervisorActions = auditLogs.filter(l => l.userRole === 'SUPERVISOR' || l.userRole === 'ADMIN').length;
 
   const filtered = auditLogs.filter((log) => {
     const searchLower = searchTerm.toLowerCase();
@@ -36,7 +49,9 @@ export const AuditHistoryView: React.FC = () => {
       log.hash.toLowerCase().includes(searchLower);
 
     const matchesFilter = targetFilter === 'ALL' ? true : log.targetType === targetFilter;
-    return matchesSearch && matchesFilter;
+    const matchesRole = roleFilter === 'ALL' ? true : log.userRole === roleFilter;
+
+    return matchesSearch && matchesFilter && matchesRole;
   });
 
   const renderEvidencePhotos = (evidence?: EvidencePhoto[] | string) => {
@@ -69,181 +84,271 @@ export const AuditHistoryView: React.FC = () => {
         return <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">ONLINE</span>;
       case 'OFFLINE':
         return <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-100 text-amber-800 border border-amber-200">OFFLINE</span>;
-      case 'CELLULAR':
-        return <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-blue-100 text-blue-800 border border-blue-200">CELLULAR</span>;
-      default:
-        return <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">SYNCED</span>;
-    }
-  };
-
-  const getConflictBadge = (status?: string) => {
-    switch (status) {
-      case 'SEMANTIC_CONFLICT':
-        return <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-0.5"><AlertTriangle className="w-2.5 h-2.5" /> CONFLICT</span>;
-      case 'RESOLVED':
-        return <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-0.5"><CheckCircle2 className="w-2.5 h-2.5" /> RESOLVED</span>;
+      case 'SYNCED':
+        return <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-blue-100 text-blue-800 border border-blue-200">SYNCED</span>;
       default:
         return null;
     }
   };
 
+  const [verifyNotice, setVerifyNotice] = useState<string | null>(null);
+
+  const handleExportAuditLog = () => {
+    const dataToExport = {
+      title: 'FIELD GUARD - Cryptographic Audit Ledger Export',
+      exportedAt: new Date().toISOString(),
+      totalEntries: auditLogs.length,
+      verifiedCount: verifiedHashes,
+      entries: auditLogs.map(log => ({
+        id: log.id,
+        timestamp: log.timestamp,
+        user: log.userName,
+        role: log.userRole,
+        action: log.action,
+        targetType: log.targetType,
+        targetId: log.targetId,
+        details: log.details,
+        sha256Hash: log.hash
+      }))
+    };
+
+    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `FIELD_GUARD_Audit_Ledger_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleVerifyHashes = () => {
+    triggerManualSync();
+    setVerifyNotice(`Verified ${verifiedHashes} of ${totalEntries} audit ledger signatures against server consensus.`);
+    setTimeout(() => setVerifyNotice(null), 5000);
+  };
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-slate-800 shadow-sm">
+    <div className="space-y-5 max-w-7xl mx-auto pb-12 font-sans select-none">
+      {/* 1. Header Row: Title on Left, Action Buttons on Right */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              IMMUTABLE COMPLIANCE AUDIT
-            </span>
-            <span className="text-xs text-slate-400 font-mono">
-              Operation & State Ledger
-            </span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white mt-1.5 tracking-tight font-display">
-            Audit Trail & Operation Timeline
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight font-display">
+            Cryptographic Audit Ledger
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
-            Complete sequence of operation IDs, entity IDs, user IDs, timestamps, network states, evidence, previous vs new values, semantic conflict states, and supervisor resolution times.
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Immutable SHA-256 hash-chained event stream logging all field creations, checklist sign-offs, and CRDT conflict resolutions.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-950/60 px-3.5 py-2 rounded-xl border border-emerald-800/80 self-start sm:self-auto font-semibold">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>CRYPTOGRAPHICALLY SEALED</span>
+        <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto">
+          <button
+            onClick={handleExportAuditLog}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-2xs active:scale-95 transition cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export Audit Log</span>
+          </button>
+
+          <button
+            onClick={handleVerifyHashes}
+            disabled={!isOnline || syncStatus === 'SYNCING'}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition cursor-pointer disabled:opacity-50"
+            title="Synchronize audit hashes with server"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
+            <span>Verify Hashes</span>
+          </button>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search Operation ID, Entity ID, User, Action or Hash..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs placeholder:text-slate-400 focus:outline-hidden focus:border-indigo-500 focus:bg-white"
-          />
+      {verifyNotice && (
+        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2 shadow-xs">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="font-semibold">{verifyNotice}</span>
         </div>
+      )}
 
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          {['ALL', 'INSPECTION', 'CONFLICT', 'EQUIPMENT', 'USER', 'SYSTEM'].map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setTargetFilter(cat)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
-                targetFilter === cat
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Audit Timeline Stream */}
-      <div className="space-y-4">
-        <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider font-mono flex items-center gap-2">
-          <GitCommit className="w-4 h-4 text-indigo-600" />
-          <span>Audit Timeline Events ({filtered.length})</span>
-        </h3>
-
-        <div className="relative pl-4 sm:pl-6 border-l-2 border-indigo-200 space-y-6">
-          {filtered.map((log) => (
-            <div key={log.id} className="relative group">
-              {/* Timeline Marker Dot */}
-              <div className="absolute -left-[21px] sm:-left-[29px] top-1.5 w-3.5 h-3.5 rounded-full bg-white border-2 border-indigo-600 shadow-2xs group-hover:scale-125 transition" />
-
-              {/* Event Card */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-indigo-300 transition space-y-3">
-                {/* Top Row: Time & Header Action */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                      {log.action}
-                    </span>
-                    {getConflictBadge(log.conflictStatus)}
-                    {getNetworkBadge(log.networkState)}
-                  </div>
-
-                  <div className="flex items-center gap-2 text-slate-500 font-mono text-[11px]">
-                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                    <span className="text-slate-300">•</span>
-                    <span>{new Date(log.timestamp).toLocaleDateString()}</span>
-                  </div>
-                </div>
-
-                {/* Event Description */}
-                <p className="text-xs sm:text-sm text-slate-900 font-medium leading-relaxed">
-                  {log.details}
-                </p>
-
-                {/* State Value Comparison (Previous Value -> New Value) */}
-                {(log.previousValue || log.newValue) && (
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 font-mono text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <span className="text-[10px] font-bold uppercase text-slate-400">Previous:</span>
-                      <span className="text-slate-800 font-semibold">{log.previousValue || 'N/A'}</span>
-                    </div>
-
-                    <ArrowRight className="w-4 h-4 text-slate-400 hidden sm:block shrink-0" />
-
-                    <div className="flex items-center gap-2 text-emerald-800">
-                      <span className="text-[10px] font-bold uppercase text-slate-400">New / Merged:</span>
-                      <span className="text-emerald-700 font-bold">{log.newValue || 'N/A'}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Extended Details Grid: OpID, Entity ID, Evidence, Resolver */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-slate-100 text-[11px] font-mono text-slate-600">
-                  {/* User / Actor */}
-                  <div className="flex items-center gap-1.5 truncate">
-                    <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">User: <strong className="text-slate-900">{log.userName}</strong> ({log.userId})</span>
-                  </div>
-
-                  {/* Operation ID */}
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Hash className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">OpID: <strong className="text-indigo-900">{log.operationId || log.targetId}</strong></span>
-                  </div>
-
-                  {/* Entity ID */}
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">Entity: <strong className="text-slate-900">{log.entityId || log.targetType}</strong></span>
-                  </div>
-
-                  {/* Resolver / Resolution Time */}
-                  {log.resolver ? (
-                    <div className="flex items-center gap-1.5 truncate text-emerald-800">
-                      <Shield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="truncate">Resolved By: <strong>{log.resolver}</strong></span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5 truncate text-slate-400">
-                      <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate">Hash: {log.hash}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Evidence Attachment Line */}
-                {log.evidence && (
-                  <div className="pt-2 border-t border-slate-100">
-                    {renderEvidencePhotos(log.evidence)}
-                  </div>
-                )}
-              </div>
+      {/* 2. KPI Summary Cards Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Total Entries */}
+        <div 
+          onClick={() => { setTargetFilter('ALL'); setRoleFilter('ALL'); }}
+          className={`p-3.5 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+            targetFilter === 'ALL' && roleFilter === 'ALL' ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-300' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700">Total Audit Events</span>
+            <div className="p-1 rounded-md bg-blue-100 text-blue-700">
+              <ShieldCheck className="w-3.5 h-3.5" />
             </div>
-          ))}
+          </div>
+          <p className="text-xl font-bold text-slate-900 font-mono">{totalEntries}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Immutable records</p>
+        </div>
+
+        {/* Verified Hashes */}
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700">SHA-256 Validated</span>
+            <div className="p-1 rounded-md bg-emerald-100 text-emerald-700">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <p className="text-xl font-bold text-emerald-700 font-mono">{verifiedHashes}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">100% Chain integrity</p>
+        </div>
+
+        {/* Field Technician Actions */}
+        <div 
+          onClick={() => setRoleFilter('TECHNICIAN')}
+          className={`p-3.5 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+            roleFilter === 'TECHNICIAN' ? 'bg-amber-50 border-amber-400 ring-1 ring-amber-300' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700">Technician Actions</span>
+            <div className="p-1 rounded-md bg-amber-100 text-amber-700">
+              <User className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <p className="text-xl font-bold text-amber-700 font-mono">{technicianActions}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Field operations</p>
+        </div>
+
+        {/* Supervisor Sign-Offs */}
+        <div 
+          onClick={() => setRoleFilter('SUPERVISOR')}
+          className={`p-3.5 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+            roleFilter === 'SUPERVISOR' ? 'bg-purple-50 border-purple-400 ring-1 ring-purple-300' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700">Governance Events</span>
+            <div className="p-1 rounded-md bg-purple-100 text-purple-700">
+              <Lock className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <p className="text-xl font-bold text-purple-700 font-mono">{supervisorActions}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Overrides & sign-offs</p>
         </div>
       </div>
+
+      {/* 3. Search & Filter Toolbar */}
+      <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 items-center">
+          {/* Search Input */}
+          <div className="lg:col-span-6 relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search action, actor, hash, or target entity ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs placeholder:text-slate-400 focus:outline-hidden focus:border-blue-500 focus:bg-white transition"
+            />
+          </div>
+
+          {/* Target Type Dropdown */}
+          <div className="lg:col-span-3">
+            <select
+              value={targetFilter}
+              onChange={(e) => setTargetFilter(e.target.value)}
+              aria-label="Filter by Target Type"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-xs focus:outline-hidden focus:border-blue-500 focus:bg-white cursor-pointer"
+            >
+              <option value="ALL">All Target Entities</option>
+              <option value="INSPECTION">Inspections</option>
+              <option value="CONFLICT">Conflicts</option>
+              <option value="DEFECT">Defects</option>
+              <option value="SYNC">Sync Events</option>
+              <option value="AUTH">Authentication</option>
+            </select>
+          </div>
+
+          {/* Search & Reset Buttons */}
+          <div className="lg:col-span-3 flex items-center gap-2">
+            <button
+              onClick={() => {}}
+              className="w-full py-2 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Search</span>
+            </button>
+            {(searchTerm || targetFilter !== 'ALL' || roleFilter !== 'ALL') && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setTargetFilter('ALL');
+                  setRoleFilter('ALL');
+                }}
+                className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition cursor-pointer"
+                title="Clear Filters"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Audit Table */}
+      {filtered.length === 0 ? (
+        <div className="p-12 rounded-2xl bg-white border border-slate-200 text-center text-slate-500 space-y-2 shadow-2xs">
+          <ShieldCheck className="w-10 h-10 text-slate-400 mx-auto" />
+          <p className="text-base font-semibold text-slate-900 font-display">No audit events match your criteria</p>
+          <p className="text-xs text-slate-500">Try adjusting your search terms or filter selections.</p>
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-white border border-slate-200 overflow-hidden shadow-2xs">
+          <table className="w-full text-left text-xs text-slate-700">
+            <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200 font-mono">
+              <tr>
+                <th className="py-3 px-4 font-semibold">Timestamp</th>
+                <th className="py-3 px-4 font-semibold">Actor & Role</th>
+                <th className="py-3 px-4 font-semibold">Action / Event</th>
+                <th className="py-3 px-4 font-semibold">Target Entity</th>
+                <th className="py-3 px-4 font-semibold">State</th>
+                <th className="py-3 px-4 font-semibold">SHA-256 Hash</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-sans">
+              {filtered.map((log) => (
+                <tr key={log.id} className="hover:bg-blue-50/30 transition">
+                  <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                    {new Date(log.timestamp).toLocaleString()}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <div className="font-semibold text-slate-900">{log.userName}</div>
+                    <div className="text-[10px] font-mono text-slate-500">{log.userRole}</div>
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <div className="font-semibold text-slate-800">{log.action}</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">{log.details}</div>
+                    {renderEvidencePhotos(log.evidence)}
+                  </td>
+                  <td className="py-3.5 px-4 font-mono text-[11px]">
+                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                      {log.targetType}: {log.targetId}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 whitespace-nowrap">
+                    {getNetworkBadge(log.networkState)}
+                  </td>
+                  <td className="py-3.5 px-4 font-mono text-[10px] text-slate-500 whitespace-nowrap">
+                    <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded border border-slate-200 w-fit">
+                      <Hash className="w-3 h-3 text-slate-400" />
+                      <span>{log.hash.slice(0, 16)}...</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

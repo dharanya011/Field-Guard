@@ -396,9 +396,82 @@ class RelationalDatabaseStore {
             resolved: false
           }
         ]
+      },
+      {
+        id: 'insp-103',
+        code: 'INS-2026-0893',
+        title: 'Main Turbine Vibration & Bearing Acoustic Survey',
+        equipmentId: 'eq-01',
+        equipmentName: 'Main Turbine Generator T-400',
+        facility: 'Alpha Energy Sector 4',
+        zone: 'Bay 12 - Substation 03',
+        assignedTechnicianId: 'usr-tech-02',
+        technicianName: 'David Chen',
+        supervisorId: 'usr-sup-01',
+        supervisorName: 'Marcus Reid',
+        status: 'PASSED',
+        syncState: 'SYNCED',
+        riskLevel: 'LOW',
+        score: 96,
+        scheduledDate: '2026-09-18',
+        completedDate: '2026-09-18T14:30:00Z',
+        offlineDraft: false,
+        version: 2,
+        signatures: {
+          technician: { name: 'David Chen', timestamp: '2026-09-18T14:20:00Z' },
+          supervisor: { name: 'Marcus Reid', timestamp: '2026-09-18T15:00:00Z' }
+        },
+        createdAt: '2026-09-18T11:00:00Z',
+        updatedAt: '2026-09-18T14:35:00Z',
+        checklist: [
+          {
+            id: 'chk-301',
+            inspectionId: 'insp-103',
+            category: 'Vibration Analysis',
+            title: 'ISO 10816-3 Peak Velocity Spectrum',
+            requirement: 'Overall vibration RMS below 2.8 mm/s in Class I zones',
+            status: 'PASS',
+            measuredValue: '1.45 mm/s RMS (Nominal)',
+            toleranceRange: '< 2.8 mm/s',
+            notes: 'Bearing frequencies stable across all 3 drive quadrants.',
+            timestamp: '2026-09-18T13:40:00Z'
+          }
+        ],
+        defects: []
       }
     ];
     initialInspections.forEach(i => this.inspectionsMap.set(i.id, i));
+
+    // 4.1 Tasks
+    const initialTasks: DBTask[] = [
+      {
+        id: 'task-01',
+        title: 'Ultrasonic Wall Thickness Verification - Boiler B-12',
+        equipmentId: 'eq-02',
+        equipmentName: 'High-Pressure Steam Boiler B-12',
+        assignedTechnicianId: 'usr-tech-01',
+        technicianName: 'Alex Vance',
+        priority: 'HIGH',
+        status: 'ASSIGNED',
+        dueDate: '2026-09-24',
+        instructions: 'Calibrate ultrasonic probe at 5MHz and record 8 grid points along the lower header.',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'task-02',
+        title: 'Infrared Thermal Scan on Exciter Feeders',
+        equipmentId: 'eq-01',
+        equipmentName: 'Main Turbine Generator T-400',
+        assignedTechnicianId: 'usr-tech-02',
+        technicianName: 'David Chen',
+        priority: 'MEDIUM',
+        status: 'ASSIGNED',
+        dueDate: '2026-09-25',
+        instructions: 'Perform thermographic sweep under >80% generating load.',
+        createdAt: new Date().toISOString()
+      }
+    ];
+    initialTasks.forEach(t => this.tasksMap.set(t.id, t));
 
     // 5. Conflicts
     this.conflictsMap.set('conf-01', {
@@ -524,6 +597,27 @@ class RelationalDatabaseStore {
     this.inspectionsMap.set(id, updated);
     this.addAuditEntry(userId, userName, userRole, 'INSPECTION_UPDATED', 'INSPECTION', id, `Updated inspection ${updated.code}. Version ${updated.version}.`);
     return updated;
+  }
+
+  public deleteInspection(id: string, userId: string, userName: string, userRole: string): boolean {
+    const existing = this.inspectionsMap.get(id);
+    if (!existing) {
+      throw new Error(`Inspection ${id} not found in database.`);
+    }
+
+    this.inspectionsMap.delete(id);
+    this.addAuditEntry(userId, userName, userRole, 'INSPECTION_DELETED', 'INSPECTION', id, `Deleted inspection ${existing.code} (${existing.equipmentName}) from database.`);
+    return true;
+  }
+
+  public deleteConflict(id: string, userId: string, userName: string, userRole: string): boolean {
+    const existing = this.conflictsMap.get(id);
+    if (!existing) {
+      throw new Error(`Conflict ${id} not found in database.`);
+    }
+    this.conflictsMap.delete(id);
+    this.addAuditEntry(userId, userName, userRole, 'CONFLICT_DELETED', 'CONFLICT', id, `Removed conflict record ${id}`);
+    return true;
   }
 
   // --- SYNC PUSH & PULL ---
@@ -752,8 +846,128 @@ class RelationalDatabaseStore {
     return Array.from(this.equipmentMap.values());
   }
 
+  public getEquipmentById(id: string): DBEquipment | undefined {
+    return this.equipmentMap.get(id);
+  }
+
+  public createEquipment(data: Partial<DBEquipment>, userId: string, userName: string): DBEquipment {
+    const id = data.id || `eq-${Date.now()}`;
+    const newEq: DBEquipment = {
+      id,
+      tag: data.tag || `TAG-${Math.floor(100 + Math.random() * 900)}`,
+      name: data.name || 'New Industrial Asset',
+      category: data.category || 'General Equipment',
+      facility: data.facility || 'Alpha Energy Sector 4',
+      location: data.location || 'Bay 1',
+      status: data.status || 'OPERATIONAL',
+      lastInspectionDate: data.lastInspectionDate || new Date().toISOString().split('T')[0],
+      nextScheduledDate: data.nextScheduledDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      healthScore: data.healthScore ?? 100,
+      criticality: data.criticality || 'MEDIUM',
+      createdAt: new Date().toISOString()
+    };
+    this.equipmentMap.set(id, newEq);
+    this.addAuditEntry(userId, userName, 'ADMIN', 'EQUIPMENT_REGISTERED', 'EQUIPMENT', id, `Registered new asset ${newEq.name} (${newEq.tag})`);
+    return newEq;
+  }
+
+  public updateEquipment(id: string, updates: Partial<DBEquipment>, userId: string, userName: string): DBEquipment {
+    const existing = this.equipmentMap.get(id);
+    if (!existing) {
+      throw new Error(`Equipment ${id} not found.`);
+    }
+    const updated: DBEquipment = {
+      ...existing,
+      ...updates
+    };
+    this.equipmentMap.set(id, updated);
+    this.addAuditEntry(userId, userName, 'ADMIN', 'EQUIPMENT_UPDATED', 'EQUIPMENT', id, `Updated equipment ${updated.name} (${updated.tag})`);
+    return updated;
+  }
+
+  public deleteEquipment(id: string, userId: string, userName: string): boolean {
+    const existing = this.equipmentMap.get(id);
+    if (!existing) {
+      throw new Error(`Equipment ${id} not found.`);
+    }
+    this.equipmentMap.delete(id);
+    this.addAuditEntry(userId, userName, 'ADMIN', 'EQUIPMENT_DELETED', 'EQUIPMENT', id, `Removed equipment ${existing.name} (${existing.tag})`);
+    return true;
+  }
+
+  // --- USER MANAGEMENT ACCESSORS ---
+
+  public getAllUsers(): DBUser[] {
+    return Array.from(this.usersMap.values());
+  }
+
+  public getUserById(id: string): DBUser | undefined {
+    return this.usersMap.get(id);
+  }
+
+  public createUser(user: Partial<DBUser>, adminUserId: string, adminUserName: string): DBUser {
+    const id = user.id || `usr-${Date.now()}`;
+    const newUser: DBUser = {
+      id,
+      email: user.email || `user.${Date.now()}@fieldguard.io`,
+      passwordHash: user.passwordHash || 'password123',
+      name: user.name || 'Field Personnel',
+      role: user.role || 'TECHNICIAN',
+      title: user.title || 'Field Specialist',
+      badgeNumber: user.badgeNumber || `BG-${Math.floor(1000 + Math.random() * 9000)}`,
+      certificationLevel: user.certificationLevel || 'Level II - Field Tech',
+      avatar: user.avatar || '',
+      createdAt: new Date().toISOString()
+    };
+    this.usersMap.set(id, newUser);
+    this.addAuditEntry(adminUserId, adminUserName, 'ADMIN', 'USER_CREATED', 'USER', id, `Created user account for ${newUser.name} with role ${newUser.role}`);
+    return newUser;
+  }
+
+  public updateUser(id: string, updates: Partial<DBUser>, adminUserId: string, adminUserName: string): DBUser {
+    const existing = this.usersMap.get(id);
+    if (!existing) {
+      throw new Error(`User ${id} not found.`);
+    }
+    const updated: DBUser = {
+      ...existing,
+      ...updates
+    };
+    this.usersMap.set(id, updated);
+    this.addAuditEntry(adminUserId, adminUserName, 'ADMIN', 'USER_UPDATED', 'USER', id, `Updated user account for ${updated.name}`);
+    return updated;
+  }
+
+  public deleteUser(id: string, adminUserId: string, adminUserName: string): boolean {
+    const existing = this.usersMap.get(id);
+    if (!existing) {
+      throw new Error(`User ${id} not found.`);
+    }
+    this.usersMap.delete(id);
+    this.addAuditEntry(adminUserId, adminUserName, 'ADMIN', 'USER_DELETED', 'USER', id, `Deleted user account for ${existing.name}`);
+    return true;
+  }
+
+  // --- TASK ACCESSORS ---
+
   public getAllTasks(): DBTask[] {
     return Array.from(this.tasksMap.values());
+  }
+
+  public getTasksByTechnician(technicianId: string): DBTask[] {
+    return Array.from(this.tasksMap.values()).filter(t => t.assignedTechnicianId === technicianId);
+  }
+
+  public getInspectionsByTechnician(technicianId: string): DBInspection[] {
+    return Array.from(this.inspectionsMap.values()).filter(i => i.assignedTechnicianId === technicianId);
+  }
+
+  public getAllConflicts(): DBConflict[] {
+    return Array.from(this.conflictsMap.values());
+  }
+
+  public getAllAuditLogs(): DBAuditEntry[] {
+    return [...this.auditHistoryList];
   }
 
   public createTask(task: Partial<DBTask>, userId: string, userName: string): DBTask {
@@ -774,6 +988,104 @@ class RelationalDatabaseStore {
     this.tasksMap.set(id, newRecord);
     this.addAuditEntry(userId, userName, 'SUPERVISOR', 'TASK_CREATED', 'TASK', id, `Assigned task ${id} to ${newRecord.technicianName}`);
     return newRecord;
+  }
+
+  public updateTask(id: string, updates: Partial<DBTask>, userId: string, userName: string): DBTask {
+    const existing = this.tasksMap.get(id);
+    if (!existing) {
+      throw new Error(`Task ${id} not found.`);
+    }
+    const updated: DBTask = {
+      ...existing,
+      ...updates
+    };
+    this.tasksMap.set(id, updated);
+    this.addAuditEntry(userId, userName, 'SUPERVISOR', 'TASK_UPDATED', 'TASK', id, `Updated task ${id} status to ${updated.status}`);
+    return updated;
+  }
+
+  public deleteTask(id: string, userId: string, userName: string): boolean {
+    const existing = this.tasksMap.get(id);
+    if (!existing) {
+      throw new Error(`Task ${id} not found.`);
+    }
+    this.tasksMap.delete(id);
+    this.addAuditEntry(userId, userName, 'SUPERVISOR', 'TASK_DELETED', 'TASK', id, `Removed task ${id}`);
+    return true;
+  }
+
+  // --- REAL DATABASE ANALYTICS AGGREGATOR ---
+
+  public getAnalytics() {
+    const inspections = Array.from(this.inspectionsMap.values());
+    const equipments = Array.from(this.equipmentMap.values());
+    const conflicts = Array.from(this.conflictsMap.values());
+
+    const total = inspections.length;
+    const passed = inspections.filter(i => i.status === 'PASSED').length;
+    const failed = inspections.filter(i => i.status === 'FAILED').length;
+    const inProgress = inspections.filter(i => i.status === 'IN_PROGRESS').length;
+    const pendingReview = inspections.filter(i => i.status === 'PENDING_REVIEW').length;
+    const activeConflicts = conflicts.filter(c => c.status === 'ACTIVE').length;
+
+    const totalDefects = inspections.reduce((acc, curr) => acc + (curr.defects?.length || 0), 0);
+    const criticalDefects = inspections.reduce(
+      (acc, curr) => acc + (curr.defects?.filter(d => d.severity === 'CRITICAL').length || 0),
+      0
+    );
+    const highDefects = inspections.reduce(
+      (acc, curr) => acc + (curr.defects?.filter(d => d.severity === 'HIGH').length || 0),
+      0
+    );
+
+    const averageScore = total > 0
+      ? Math.round(inspections.reduce((sum, i) => sum + (i.score || 0), 0) / total)
+      : 0;
+
+    const averageEquipmentHealth = equipments.length > 0
+      ? Math.round(equipments.reduce((sum, e) => sum + (e.healthScore || 0), 0) / equipments.length)
+      : 0;
+
+    return {
+      totalInspections: total,
+      passedInspections: passed,
+      failedInspections: failed,
+      inProgressInspections: inProgress,
+      pendingReviewInspections: pendingReview,
+      activeConflicts,
+      totalDefects,
+      criticalDefects,
+      highDefects,
+      complianceRate: averageScore,
+      averageEquipmentHealth,
+      totalEquipmentCount: equipments.length,
+      operationalEquipmentCount: equipments.filter(e => e.status === 'OPERATIONAL').length,
+      maintenanceEquipmentCount: equipments.filter(e => e.status === 'NEEDS_MAINTENANCE' || e.status === 'CRITICAL_OFFLINE').length
+    };
+  }
+
+  // --- SETTINGS & NOTIFICATIONS ---
+
+  private systemSettings: Record<string, unknown> = {
+    offlineSyncIntervalMinutes: 5,
+    biometricLockTimeoutMinutes: 15,
+    enforceSha256AuditHashing: true,
+    allowSimulatedOfflineMode: true,
+    defaultRiskTolerance: 'MEDIUM'
+  };
+
+  public getAdminSettings() {
+    return { ...this.systemSettings };
+  }
+
+  public updateAdminSettings(settings: Record<string, unknown>, userId: string, userName: string) {
+    this.systemSettings = {
+      ...this.systemSettings,
+      ...settings,
+      updatedAt: new Date().toISOString()
+    };
+    this.addAuditEntry(userId, userName, 'ADMIN', 'SYSTEM_SETTINGS_UPDATED', 'SYSTEM', 'config', `Updated system configuration parameters`);
+    return this.systemSettings;
   }
 
   public getRiskAlerts() {
@@ -802,26 +1114,16 @@ class RelationalDatabaseStore {
   }
 
   public getNotifications(): DBNotification[] {
-    return [
-      {
-        id: 'notif-01',
-        userId: 'usr-tech-01',
-        title: 'New Assignment',
-        message: 'High-Pressure Steam Boiler B-12 inspection assigned for today.',
-        type: 'INFO',
-        isRead: false,
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'notif-02',
-        userId: 'usr-sup-01',
-        title: 'CRDT Conflict Detected',
-        message: 'Ventilation AHU-09 has diverged draft values between field technicians.',
-        type: 'ALERT',
-        isRead: false,
-        createdAt: new Date().toISOString()
-      }
-    ];
+    return [...this.notificationsList];
+  }
+
+  public markNotificationRead(id: string): boolean {
+    const notif = this.notificationsList.find(n => n.id === id);
+    if (notif) {
+      notif.isRead = true;
+      return true;
+    }
+    return false;
   }
 }
 

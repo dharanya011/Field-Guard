@@ -4,7 +4,6 @@ import { NetworkProvider } from './context/NetworkContext';
 import { InspectionProvider, useInspections } from './context/InspectionContext';
 import { RouterProvider, useRouter } from './context/RouterContext';
 import { Header } from './components/common/Header';
-import { PersistentNetworkBanner } from './components/common/PersistentNetworkBanner';
 import { Sidebar } from './components/common/Sidebar';
 import { BottomNav } from './components/common/BottomNav';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
@@ -25,7 +24,6 @@ import { ProfileView } from './components/views/ProfileView';
 import { InspectionDetailModal } from './components/views/InspectionDetailModal';
 import { InspectionScreen } from './components/views/InspectionScreen';
 import { NewInspectionModal } from './components/views/NewInspectionModal';
-import { Shield, KeyRound, ArrowRight } from 'lucide-react';
 import type { Inspection } from './types';
 
 const MainAppContent: React.FC = () => {
@@ -70,12 +68,12 @@ const MainAppContent: React.FC = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center space-y-4">
-        <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-mono font-black text-lg shadow-lg shadow-blue-500/20 animate-pulse">
-          WA-1
+        <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white font-mono font-black text-sm shadow-md shadow-blue-500/20 animate-pulse">
+          FG
         </div>
         <div className="space-y-1">
-          <p className="text-sm font-bold text-slate-800">Verifying Field Authorization Token</p>
-          <p className="text-xs text-slate-500 font-mono">Validating cryptographic JWT session with backend...</p>
+          <p className="text-sm font-bold text-slate-800">FIELD GUARD</p>
+          <p className="text-xs text-slate-500 font-mono">Validating cryptographic session token...</p>
         </div>
       </div>
     );
@@ -209,7 +207,7 @@ const MainAppContent: React.FC = () => {
         <ProtectedRoute
           allowedRoles={['ADMIN']}
           requiredRoleLabel="System Administrator"
-          actionAttempted="access the WA-1 System Administration Console"
+          actionAttempted="access the FIELD GUARD System Administration Console"
         >
           <AdminDashboard onNavigate={handleViewNavigation} />
         </ProtectedRoute>
@@ -336,71 +334,13 @@ const MainAppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+    <div className="h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white overflow-hidden">
       {/* Top Navigation Header */}
       <Header
         activeView={activeView}
         setActiveView={handleViewNavigation}
         onToggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
       />
-
-      {/* Persistent Network & Offline Primary Store Banner */}
-      <PersistentNetworkBanner />
-
-      {/* Interactive Quick Route & Role Tester Bar */}
-      <div className="bg-slate-100 border-b border-slate-200 px-4 py-1.5 flex items-center justify-between text-[11px] overflow-x-auto gap-4">
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="font-mono font-bold text-slate-500 uppercase flex items-center gap-1">
-            <KeyRound className="w-3 h-3 text-blue-600" />
-            RBAC Route Guard:
-          </span>
-          <code className="bg-white px-2 py-0.5 rounded border border-slate-200 font-mono text-blue-700 font-bold">
-            {currentPath}
-          </code>
-          <span className="text-slate-400">|</span>
-          <span className="text-slate-600">
-            Active: <strong className="text-slate-900">{currentUser?.name}</strong> ({currentUser?.role})
-          </span>
-        </div>
-
-        {/* Quick Link Buttons to Test 403 vs 200 */}
-        <div className="flex items-center gap-1.5 shrink-0 font-medium">
-          <span className="text-slate-400">Direct Route Tests:</span>
-          <button
-            onClick={() => navigate('/technician/dashboard')}
-            className={`px-2 py-0.5 rounded transition ${currentPath === '/technician/dashboard' ? 'bg-blue-600 text-white font-bold' : 'hover:bg-slate-200 text-slate-700'}`}
-          >
-            /tech/dash
-          </button>
-          <button
-            onClick={() => navigate('/technician/inspect')}
-            className={`px-2 py-0.5 rounded transition ${currentPath === '/technician/inspect' ? 'bg-blue-600 text-white font-bold' : 'hover:bg-slate-200 text-slate-700'}`}
-          >
-            /tech/inspect
-          </button>
-          <button
-            onClick={() => navigate('/supervisor/conflicts')}
-            className={`px-2 py-0.5 rounded transition ${currentPath === '/supervisor/conflicts' ? 'bg-blue-600 text-white font-bold' : 'hover:bg-slate-200 text-slate-700'}`}
-            title="Technicians will receive 403 Forbidden"
-          >
-            /sup/conflicts {currentUser?.role === 'TECHNICIAN' && '🔒'}
-          </button>
-          <button
-            onClick={() => navigate('/admin/dashboard')}
-            className={`px-2 py-0.5 rounded transition ${currentPath === '/admin/dashboard' ? 'bg-blue-600 text-white font-bold' : 'hover:bg-slate-200 text-slate-700'}`}
-            title="Non-admins will receive 403 Forbidden"
-          >
-            /admin/dash {currentUser?.role !== 'ADMIN' && '🔒'}
-          </button>
-          <button
-            onClick={() => navigate('/users')}
-            className={`px-2 py-0.5 rounded transition ${currentPath === '/users' ? 'bg-blue-600 text-white font-bold' : 'hover:bg-slate-200 text-slate-700'}`}
-            title="Non-admins will receive 403 Forbidden"
-          >
-            /users {currentUser?.role !== 'ADMIN' && '🔒'}
-          </button>
-        </div>
-      </div>
 
       {/* Body Layout: Desktop Sidebar + Main Viewport */}
       <div className="flex-1 flex overflow-hidden">
@@ -413,7 +353,7 @@ const MainAppContent: React.FC = () => {
         />
 
         {/* Main Workspace Viewport */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-5 md:py-6 pb-20 md:pb-8">
+        <main className="flex-1 overflow-y-auto px-3 sm:px-5 lg:px-6 py-3.5 sm:py-4 pb-20 md:pb-6">
           {renderCurrentRoute()}
         </main>
       </div>

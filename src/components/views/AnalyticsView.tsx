@@ -91,6 +91,57 @@ export const AnalyticsView: React.FC = () => {
     NORMAL: smartPriorities.filter(p => p.assessment.priority === 'NORMAL').length,
   };
 
+  const handleExportIsoReport = () => {
+    const reportData = {
+      title: 'FIELD GUARD - Enterprise ISO 55001 / 10816 Compliance Report',
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalInspections: total,
+        passed,
+        failed,
+        inProgress,
+        pendingReview,
+        conflicts,
+        averageCompliance: `${averageScore}%`,
+        evidenceReliability: `${avgReliability}%`,
+        predictiveAlertsCount: predictiveAlerts.length,
+        totalDefects,
+        criticalDefects,
+        highDefects,
+        mediumDefects
+      },
+      equipmentFleet: equipments.map(eq => ({
+        tag: eq.tag,
+        name: eq.name,
+        facility: eq.facility,
+        location: eq.location,
+        status: eq.status,
+        healthScore: eq.healthScore,
+        criticality: eq.criticality
+      })),
+      inspections: inspections.map(i => ({
+        code: i.code,
+        title: i.title,
+        equipment: i.equipmentName,
+        status: i.status,
+        score: i.score,
+        technician: i.technicianName,
+        completedDate: i.completedDate || i.scheduledDate,
+        defectsCount: i.defects.length
+      }))
+    };
+
+    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `FIELD_GUARD_ISO_Report_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Header */}
@@ -107,7 +158,10 @@ export const AnalyticsView: React.FC = () => {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 shadow-2xs transition self-start sm:self-auto">
+        <button 
+          onClick={handleExportIsoReport}
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 shadow-2xs transition self-start sm:self-auto cursor-pointer"
+        >
           <Download className="w-4 h-4 text-blue-600" />
           <span>Export ISO Report</span>
         </button>

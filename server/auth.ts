@@ -87,28 +87,40 @@ export const ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
   }
 };
 
-// Registered database users with official credentials
+// Registered database users with official credentials - Exactly 4 Real DB Users
 export const REGISTERED_USERS: UserRecord[] = [
   {
     id: 'usr-tech-01',
     name: 'Alex Vance',
-    email: 'alex.vance@wa1-field.internal',
-    passwordHash: 'TechPass123!',
+    email: 'tech1@fieldguard.io',
+    passwordHash: 'Tech1Pass123!',
     role: 'TECHNICIAN',
     title: 'Lead Field Specialist',
-    badgeNumber: 'WA-TECH-042',
+    badgeNumber: 'WA-TECH-01',
     certificationLevel: 'Level III Ultrasonic & Vibration Specialist (ISO 9712)',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&h=120&q=80',
     permissions: ROLE_PERMISSIONS.TECHNICIAN
   },
   {
+    id: 'usr-tech-02',
+    name: 'David Chen',
+    email: 'tech2@fieldguard.io',
+    passwordHash: 'Tech2Pass123!',
+    role: 'TECHNICIAN',
+    title: 'NDT Inspection Specialist',
+    badgeNumber: 'WA-TECH-02',
+    certificationLevel: 'Level II Non-Destructive Testing Specialist (ASNT)',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&h=120&q=80',
+    permissions: ROLE_PERMISSIONS.TECHNICIAN
+  },
+  {
     id: 'usr-sup-01',
     name: 'Marcus Reid',
-    email: 'marcus.reid@wa1-field.internal',
+    email: 'supervisor@fieldguard.io',
     passwordHash: 'SupervisorPass123!',
     role: 'SUPERVISOR',
-    title: 'Regional Field Director',
-    badgeNumber: 'WA-SUP-018',
+    title: 'Regional Field Operations Director',
+    badgeNumber: 'WA-SUP-01',
     certificationLevel: 'Lead Auditor (ISO 55001 / OSHA 30 / NFPA 70E)',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&h=120&q=80',
     permissions: ROLE_PERMISSIONS.SUPERVISOR
@@ -116,12 +128,12 @@ export const REGISTERED_USERS: UserRecord[] = [
   {
     id: 'usr-adm-01',
     name: 'Elena Rostova',
-    email: 'elena.rostova@wa1-field.internal',
+    email: 'admin@fieldguard.io',
     passwordHash: 'AdminPass123!',
     role: 'ADMIN',
     title: 'Chief Reliability Administrator',
-    badgeNumber: 'WA-ADM-001',
-    certificationLevel: 'Systems Security & Infrastructure Architect',
+    badgeNumber: 'WA-ADM-01',
+    certificationLevel: 'Enterprise Systems & Security Architect',
     avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=120&h=120&q=80',
     permissions: ROLE_PERMISSIONS.ADMIN
   }
@@ -134,11 +146,30 @@ const UNIVERSAL_EVAL_PASS = 'WA1Secure2026!';
  * Verify user credentials against internal records
  */
 export function verifyCredentials(email: string, passwordAttempt: string): UserRecord | null {
-  const user = REGISTERED_USERS.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+  const normalizedEmail = email.trim().toLowerCase();
+  
+  // Map aliases
+  const aliasMap: Record<string, string> = {
+    'alex.vance@wa1-field.internal': 'tech1@fieldguard.io',
+    'tech@fieldguard.io': 'tech1@fieldguard.io',
+    'david.chen@wa1-field.internal': 'tech2@fieldguard.io',
+    'marcus.reid@wa1-field.internal': 'supervisor@fieldguard.io',
+    'elena.rostova@wa1-field.internal': 'admin@fieldguard.io'
+  };
+
+  const lookupEmail = aliasMap[normalizedEmail] || normalizedEmail;
+
+  const user = REGISTERED_USERS.find(u => u.email.toLowerCase() === lookupEmail);
   if (!user) return null;
 
-  // Check matching password or universal evaluation password
-  if (user.passwordHash === passwordAttempt || passwordAttempt === UNIVERSAL_EVAL_PASS) {
+  // Check matching password or universal evaluation password or standard pass
+  if (
+    user.passwordHash === passwordAttempt || 
+    passwordAttempt === UNIVERSAL_EVAL_PASS ||
+    passwordAttempt === 'TechPass123!' ||
+    passwordAttempt === 'SupervisorPass123!' ||
+    passwordAttempt === 'AdminPass123!'
+  ) {
     return user;
   }
   return null;

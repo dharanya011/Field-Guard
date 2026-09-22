@@ -17,6 +17,7 @@ import { db, initDatabase } from '../db/offlineDb';
 import { useAuth } from './AuthContext';
 import { useNetwork } from './NetworkContext';
 import { crdtManager } from '../services/crdtService';
+import { ApiClient } from '../services/api';
 
 interface InspectionContextType {
   inspections: Inspection[];
@@ -41,6 +42,10 @@ interface InspectionContextType {
     riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   }) => Promise<Inspection>;
   saveInspection: (updatedInspection: Inspection) => Promise<void>;
+  deleteInspection: (inspectionId: string) => Promise<void>;
+  createEquipment: (data: Partial<Equipment>) => Promise<Equipment>;
+  updateEquipment: (id: string, updates: Partial<Equipment>) => Promise<Equipment>;
+  deleteEquipment: (id: string) => Promise<void>;
   logAuditEntry: (action: string, targetType: AuditLog['targetType'], targetId: string, details: string) => Promise<void>;
   refreshAllData: () => Promise<void>;
 }
@@ -561,6 +566,90 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
+  const deleteInspection = async (inspectionId: string) => {
+    await db.inspections.delete(inspectionId);
+    if (selectedInspection?.id === inspectionId) {
+      setSelectedInspection(null);
+    }
+    if (isOnline) {
+      try {
+        await ApiClient.request(`/api/inspections/${inspectionId}`, { method: 'DELETE' });
+      } catch (e) {
+        console.warn('Backend delete notification skipped/failed:', e);
+      }
+    }
+    await logAuditEntry('INSPECTION_DELETED', 'INSPECTION', inspectionId, `Removed inspection ${inspectionId} from database.`);
+    await refreshAllData();
+  };
+
+  const createEquipment = async (data: Partial<Equipment>): Promise<Equipment> => {
+    const id = data.id || `eq-${Date.now()}`;
+    const newEq: Equipment = {
+      id,
+      tag: data.tag || `TAG-${Math.floor(100 + Math.random() * 900)}`,
+      name: data.name || 'New Industrial Asset',
+      category: data.category || 'General Equipment',
+      facility: data.facility || 'Alpha Energy Sector 4',
+      location: data.location || 'Bay 1',
+      status: data.status || 'OPERATIONAL',
+      lastInspectionDate: data.lastInspectionDate || new Date().toISOString().split('T')[0],
+      nextScheduledDate: data.nextScheduledDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      healthScore: data.healthScore ?? 100,
+      criticality: data.criticality || 'MEDIUM',
+      manufactureYear: data.manufactureYear || new Date().getFullYear() - 2
+    };
+
+    await db.equipment.put(newEq);
+
+    if (isOnline) {
+      try {
+        await ApiClient.createEquipment(newEq as any);
+      } catch (e) {
+        console.warn('Backend equipment sync deferred:', e);
+      }
+    }
+
+    await logAuditEntry('EQUIPMENT_REGISTERED', 'EQUIPMENT', id, `Registered new asset ${newEq.name} (${newEq.tag})`);
+    await refreshAllData();
+    return newEq;
+  };
+
+  const updateEquipment = async (id: string, updates: Partial<Equipment>): Promise<Equipment> => {
+    const existing = await db.equipment.get(id);
+    const updated = {
+      ...(existing || {}),
+      ...updates,
+      id
+    } as Equipment;
+
+    await db.equipment.put(updated);
+
+    if (isOnline) {
+      try {
+        await ApiClient.updateEquipment(id, updates as any);
+      } catch (e) {
+        console.warn('Backend equipment update deferred:', e);
+      }
+    }
+
+    await logAuditEntry('EQUIPMENT_UPDATED', 'EQUIPMENT', id, `Updated asset ${updated.name}`);
+    await refreshAllData();
+    return updated;
+  };
+
+  const deleteEquipment = async (id: string) => {
+    await db.equipment.delete(id);
+    if (isOnline) {
+      try {
+        await ApiClient.deleteEquipment(id);
+      } catch (e) {
+        console.warn('Backend equipment delete deferred:', e);
+      }
+    }
+    await logAuditEntry('EQUIPMENT_DELETED', 'EQUIPMENT', id, `Deleted asset ${id}`);
+    await refreshAllData();
+  };
+
   return (
     <InspectionContext.Provider
       value={{
@@ -577,6 +666,10 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         resolveConflictItem,
         createNewInspection,
         saveInspection,
+        deleteInspection,
+        createEquipment,
+        updateEquipment,
+        deleteEquipment,
         logAuditEntry,
         refreshAllData
       }}

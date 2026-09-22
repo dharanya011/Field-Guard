@@ -10,13 +10,16 @@ import {
   Database,
   Menu,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Smartphone,
+  Download
 } from 'lucide-react';
 import { useAuth, PRESET_USERS } from '../../context/AuthContext';
 import { useRouter } from '../../context/RouterContext';
 import { useNetwork } from '../../context/NetworkContext';
 import { useInspections } from '../../context/InspectionContext';
 import { PWAInstallButton } from './PWAInstallButton';
+import { MobileViewerModal } from './MobileViewerModal';
 import type { UserRole } from '../../types';
 
 interface HeaderProps {
@@ -35,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { conflicts } = useInspections();
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
+  const [showMobileModal, setShowMobileModal] = useState(false);
 
   const activeConflictsCount = conflicts.filter(c => c.status === 'ACTIVE').length;
 
@@ -81,77 +85,88 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         <div 
-          onClick={() => setActiveView('dashboard')}
-          className="flex items-center gap-2.5 cursor-pointer group"
+          onClick={navigateToDashboard}
+          className="flex items-center gap-2 cursor-pointer group select-none"
         >
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-md shadow-blue-500/20 border border-blue-400/30 group-hover:scale-105 transition-transform">
-            <span className="font-mono font-black text-sm tracking-wider text-white">WA-1</span>
+          <div className="flex items-center gap-1.5 font-display font-black text-sm sm:text-base tracking-tight text-slate-900 leading-none">
+            <span className="text-blue-700 font-mono font-black text-xs px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 group-hover:bg-blue-600 group-hover:text-white transition">
+              FG
+            </span>
+            <span className="group-hover:text-blue-700 transition">FIELD GUARD</span>
           </div>
-          <div className="hidden min-[480px]:block">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-slate-900 text-sm tracking-tight font-display">FIELD INSPECT</span>
-              <span className="px-1.5 py-0.2 text-[9px] font-bold uppercase rounded-md bg-blue-50 text-blue-700 border border-blue-200">
-                PRO
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500 font-mono">CRDT Offline Engine</p>
-          </div>
+          <span className="hidden sm:inline-block text-[9px] font-mono tracking-wider text-slate-500 font-bold uppercase pl-2 border-l border-slate-200">
+            OFFLINE-FIRST FIELD INSPECTION
+          </span>
         </div>
       </div>
 
-      {/* Middle: Search & Network Status */}
-      <div className="flex items-center gap-2 sm:gap-3 flex-1 justify-end md:justify-center max-w-md">
-        {/* Offline / Online Network Pill (with 1-click toggle for testing) */}
+      {/* Middle: Unified Compact Status Area */}
+      <div className="flex items-center gap-2 sm:gap-2.5 flex-1 justify-end md:justify-center max-w-lg">
+        {/* ONLINE / OFFLINE Status Button (with 1-click toggle for testing) */}
         <button
           onClick={toggleSimulatedOffline}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition shadow-2xs active:scale-95 ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition shadow-2xs active:scale-95 cursor-pointer ${
             isOnline
               ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
               : 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100 animate-pulse'
           }`}
-          title={isOnline ? 'Network Online. Click to simulate Offline mode.' : 'Currently Offline (IndexedDB Dexie active). Click to reconnect.'}
+          title={isOnline ? 'Online mode active. Click to simulate offline mode.' : 'Offline mode active (Dexie.js IndexedDB storing data). Click to go online.'}
         >
-          {isOnline ? (
-            <>
-              <span className="text-xs">🟢</span>
-              <span className="font-mono">ONLINE</span>
-            </>
-          ) : (
-            <>
-              <span className="text-xs">🔴</span>
-              <span className="font-mono">OFFLINE</span>
-            </>
-          )}
+          <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+          <span className="font-mono text-[11px]">{isOnline ? 'ONLINE' : 'OFFLINE'}</span>
           {isSimulatedOffline && (
-            <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1 rounded">SIM</span>
+            <span className="text-[9px] font-bold text-amber-800 bg-amber-200/80 px-1 rounded">SIM</span>
           )}
         </button>
 
-        {/* Sync Status Button - Strictly only shows "Synced" if actual synchronization happened */}
+        {/* Sync Status Button */}
         <button
           onClick={triggerManualSync}
           disabled={!isOnline || syncStatus === 'SYNCING'}
-          className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition shadow-2xs ${
             syncStatus === 'SYNCING'
-              ? 'bg-sky-50 text-sky-800 border-sky-200'
+              ? 'bg-sky-50 text-sky-800 border-sky-300 cursor-wait'
               : unsyncedChangesCount > 0
-              ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100/70'
+              ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 cursor-pointer'
               : !isOnline
-              ? 'bg-rose-50 text-rose-700 border-rose-200 cursor-not-allowed'
-              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+              ? 'bg-rose-50/80 text-rose-800 border-rose-200'
+              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
           }`}
-          title={isOnline ? 'Trigger synchronization with field cloud' : 'Offline: Changes stored locally in Dexie IndexedDB'}
+          title={isOnline ? 'Click to trigger synchronization' : 'Offline: Changes stored locally in Dexie IndexedDB'}
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${syncStatus === 'SYNCING' ? 'animate-spin text-sky-600' : ''}`} />
-          <span className="hidden md:inline font-semibold">
+          {syncStatus === 'SYNCING' ? (
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
+          ) : unsyncedChangesCount > 0 ? (
+            <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+          ) : isOnline ? (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+          ) : (
+            <Database className="w-3.5 h-3.5 text-rose-600" />
+          )}
+          <span className="font-mono">
             {syncStatus === 'SYNCING'
-              ? 'Syncing...'
+              ? 'SYNCING...'
               : unsyncedChangesCount > 0
-              ? `${unsyncedChangesCount} Pending Sync`
+              ? `${unsyncedChangesCount} PENDING`
               : !isOnline
-              ? 'Offline (Saved)'
-              : 'Synced'}
+              ? 'LOCAL DB'
+              : 'SYNCED'}
           </span>
+        </button>
+
+        {/* PWA Ready Indicator */}
+        <span className="hidden lg:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-mono font-bold">
+          PWA OFFLINE READY
+        </span>
+
+        {/* Mobile Viewer & APK Download Button */}
+        <button
+          onClick={() => setShowMobileModal(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[11px] font-semibold transition shadow-2xs cursor-pointer active:scale-95"
+          title="Open Mobile Viewer Simulator & APK Package Download Center"
+        >
+          <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
+          <span className="hidden sm:inline">Mobile & APK</span>
         </button>
 
         {/* PWA Install Button */}
@@ -286,6 +301,12 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+
+      {/* Mobile Viewer & APK Modal */}
+      <MobileViewerModal 
+        isOpen={showMobileModal} 
+        onClose={() => setShowMobileModal(false)} 
+      />
     </header>
   );
 };

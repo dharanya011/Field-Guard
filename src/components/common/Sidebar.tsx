@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   LayoutDashboard, 
   ClipboardCheck, 
@@ -14,12 +14,19 @@ import {
   ShieldCheck, 
   Radio,
   Lock,
-  PenTool
+  PenTool,
+  AlertTriangle,
+  Bell,
+  CheckCircle2,
+  ListTodo,
+  Smartphone,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from '../../context/RouterContext';
 import { useInspections } from '../../context/InspectionContext';
 import { useNetwork } from '../../context/NetworkContext';
+import { MobileViewerModal } from './MobileViewerModal';
 
 interface SidebarProps {
   activeView: string;
@@ -38,6 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { currentPath, navigate } = useRouter();
   const { conflicts } = useInspections();
   const { isOnline, unsyncedChangesCount } = useNetwork();
+  const [showMobileModal, setShowMobileModal] = useState(false);
 
   const role = currentUser?.role || 'TECHNICIAN';
   const activeConflictsCount = conflicts.filter(c => c.status === 'ACTIVE').length;
@@ -58,75 +66,149 @@ export const Sidebar: React.FC<SidebarProps> = ({
     badge?: number | string;
     badgeColor?: string;
     highlight?: boolean;
-    restricted?: boolean;
   }
 
-  const navItems: NavItem[] = [
-    { 
-      id: 'dashboard', 
-      path: getDashboardPath(), 
-      label: role === 'ADMIN' ? 'Admin Dashboard' : role === 'SUPERVISOR' ? 'Supervisor Board' : 'Field Dashboard', 
-      icon: LayoutDashboard 
-    },
-    { 
-      id: 'inspections', 
-      path: '/technician/inspections', 
-      label: role === 'TECHNICIAN' ? 'Assigned Inspections' : 'Inspection Review', 
-      icon: ClipboardCheck 
-    },
-    { 
-      id: 'inspect', 
-      path: '/technician/inspect', 
-      label: 'Perform Inspection', 
-      icon: PenTool,
-      highlight: true
-    },
-    { 
-      id: 'conflicts', 
-      path: '/supervisor/conflicts', 
-      label: 'Conflict Resolution', 
-      icon: GitFork,
-      badge: activeConflictsCount > 0 ? activeConflictsCount : undefined,
-      badgeColor: 'bg-rose-500 text-white',
-      restricted: role === 'TECHNICIAN'
-    },
-    // Supervisor & Admin items
-    ...(role === 'SUPERVISOR' || role === 'ADMIN' ? [
-      { id: 'analytics', path: '/analytics', label: 'Analytics & KPIs', icon: BarChart3 },
-      { id: 'audit', path: '/audit', label: 'Audit History', icon: History }
-    ] : []),
-    { 
-      id: 'ai-assistant', 
-      path: '/ai-assistant', 
-      label: 'AI Field Assistant', 
-      icon: Sparkles, 
-      highlight: true 
-    },
-    { 
-      id: 'sync', 
-      path: '/sync', 
-      label: 'Offline Sync Center', 
-      icon: Database,
-      badge: unsyncedChangesCount > 0 ? `${unsyncedChangesCount}` : undefined,
-      badgeColor: 'bg-amber-500 text-slate-950 font-bold'
-    },
-    // Admin exclusive items
-    ...(role === 'ADMIN' ? [
-      { id: 'users', path: '/users', label: 'User & Role RBAC', icon: Users },
-      { id: 'equipment', path: '/equipment', label: 'Equipment Fleet', icon: Layers },
-      { id: 'settings', path: '/settings', label: 'System Settings', icon: Settings }
-    ] : [
-      // For Technicians and Supervisors, provide a way to test restricted routes
-      { 
-        id: 'settings', 
-        path: '/settings', 
-        label: 'System Settings', 
-        icon: Settings, 
-        restricted: true 
+  interface NavGroup {
+    title: string;
+    items: NavItem[];
+  }
+
+  // Build navigation groups by role
+  const getNavGroups = (): NavGroup[] => {
+    if (role === 'TECHNICIAN') {
+      return [
+        {
+          title: 'WORK',
+          items: [
+            { id: 'dashboard', path: '/technician/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'inspections', path: '/technician/inspections', label: 'My Inspections', icon: ClipboardCheck },
+            { id: 'inspect', path: '/technician/inspect', label: 'Perform Inspection', icon: PenTool, highlight: true },
+            { id: 'equipment', path: '/equipment', label: 'Equipment', icon: Layers }
+          ]
+        },
+        {
+          title: 'INSIGHTS & AI',
+          items: [
+            { id: 'ai-assistant', path: '/ai-assistant', label: 'AI Field Assistant', icon: Sparkles, highlight: true },
+            { id: 'audit', path: '/audit', label: 'Inspection History', icon: History }
+          ]
+        },
+        {
+          title: 'SYSTEM',
+          items: [
+            { 
+              id: 'sync', 
+              path: '/sync', 
+              label: 'Sync Center', 
+              icon: Database,
+              badge: unsyncedChangesCount > 0 ? `${unsyncedChangesCount}` : undefined,
+              badgeColor: 'bg-amber-100 text-amber-900 font-bold border border-amber-300'
+            },
+            { id: 'profile', path: '/profile', label: 'Profile', icon: UserCircle }
+          ]
+        }
+      ];
+    }
+
+    if (role === 'SUPERVISOR') {
+      return [
+        {
+          title: 'WORK',
+          items: [
+            { id: 'dashboard', path: '/supervisor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'inspections', path: '/technician/inspections', label: 'Inspection Monitoring', icon: ClipboardCheck },
+            { id: 'equipment', path: '/equipment', label: 'Equipment & Tasks', icon: Layers }
+          ]
+        },
+        {
+          title: 'COLLABORATION',
+          items: [
+            { 
+              id: 'conflicts', 
+              path: '/supervisor/conflicts', 
+              label: 'Conflict Resolution', 
+              icon: GitFork,
+              badge: activeConflictsCount > 0 ? activeConflictsCount : undefined,
+              badgeColor: 'bg-rose-500 text-white animate-pulse'
+            }
+          ]
+        },
+        {
+          title: 'INSIGHTS',
+          items: [
+            { id: 'analytics', path: '/analytics', label: 'Analytics & KPIs', icon: BarChart3 },
+            { id: 'audit', path: '/audit', label: 'Audit History', icon: History },
+            { id: 'ai-assistant', path: '/ai-assistant', label: 'AI Field Assistant', icon: Sparkles, highlight: true }
+          ]
+        },
+        {
+          title: 'SYSTEM',
+          items: [
+            { 
+              id: 'sync', 
+              path: '/sync', 
+              label: 'Sync Center', 
+              icon: Database,
+              badge: unsyncedChangesCount > 0 ? `${unsyncedChangesCount}` : undefined,
+              badgeColor: 'bg-amber-100 text-amber-900 font-bold border border-amber-300'
+            },
+            { id: 'profile', path: '/profile', label: 'Profile', icon: UserCircle }
+          ]
+        }
+      ];
+    }
+
+    // ADMIN
+    return [
+      {
+        title: 'WORK',
+        items: [
+          { id: 'dashboard', path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+          { id: 'inspections', path: '/technician/inspections', label: 'All Inspections', icon: ClipboardCheck },
+          { id: 'equipment', path: '/equipment', label: 'Equipment Fleet', icon: Layers }
+        ]
+      },
+      {
+        title: 'COLLABORATION',
+        items: [
+          { 
+            id: 'conflicts', 
+            path: '/supervisor/conflicts', 
+            label: 'Conflict Resolution', 
+            icon: GitFork,
+            badge: activeConflictsCount > 0 ? activeConflictsCount : undefined,
+            badgeColor: 'bg-rose-500 text-white animate-pulse'
+          }
+        ]
+      },
+      {
+        title: 'INSIGHTS',
+        items: [
+          { id: 'analytics', path: '/analytics', label: 'Analytics & KPIs', icon: BarChart3 },
+          { id: 'audit', path: '/audit', label: 'Audit History', icon: History },
+          { id: 'ai-assistant', path: '/ai-assistant', label: 'AI Field Assistant', icon: Sparkles, highlight: true }
+        ]
+      },
+      {
+        title: 'SYSTEM',
+        items: [
+          { id: 'users', path: '/users', label: 'Users & Roles RBAC', icon: Users },
+          { id: 'settings', path: '/settings', label: 'System Configuration', icon: Settings },
+          { 
+            id: 'sync', 
+            path: '/sync', 
+            label: 'Offline Sync Center', 
+            icon: Database,
+            badge: unsyncedChangesCount > 0 ? `${unsyncedChangesCount}` : undefined,
+            badgeColor: 'bg-amber-100 text-amber-900 font-bold border border-amber-300'
+          },
+          { id: 'profile', path: '/profile', label: 'Profile', icon: UserCircle }
+        ]
       }
-    ]),
-    { id: 'profile', path: '/profile', label: 'Operator Profile', icon: UserCircle }
-  ];
+    ];
+  };
+
+  const navGroups = getNavGroups();
 
   const handleSelect = (item: NavItem) => {
     setActiveView(item.id);
@@ -143,92 +225,94 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const content = (
-    <div className="h-full flex flex-col justify-between py-4 px-3 bg-white border-r border-slate-200 text-slate-700">
-      {/* Top Menu Items */}
-      <div className="space-y-4">
-        {/* User Card in Sidebar */}
-        <div className="px-3 py-2.5 rounded-2xl bg-slate-50 border border-slate-200">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg overflow-hidden bg-blue-100 border border-blue-200 flex items-center justify-center font-bold text-xs text-blue-700 shrink-0">
-              {currentUser?.avatar ? (
-                <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
-              ) : (
-                currentUser?.name.charAt(0)
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-slate-900 truncate">{currentUser?.name}</p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider font-semibold">{currentUser?.role}</span>
-              </div>
-            </div>
-          </div>
+    <div className="h-full flex flex-col justify-between bg-white text-slate-700 select-none overflow-hidden">
+      {/* Top User / Role Header */}
+      <div className="p-3 border-b border-slate-100 shrink-0 bg-white">
+        <div className="flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200">
+            <span className="w-2 h-2 rounded-full bg-blue-600" />
+            {currentUser?.role}
+          </span>
+          <span className="text-[11px] font-mono font-medium text-slate-500">
+            {currentUser?.badgeNumber}
+          </span>
         </div>
-
-        {/* Navigation list */}
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = isCurrentActive(item);
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleSelect(item)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all group ${
-                  isActive
-                    ? 'bg-blue-600 text-white shadow-xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 shrink-0 transition-colors ${
-                    isActive ? 'text-white' : item.highlight ? 'text-blue-600' : 'text-slate-500 group-hover:text-slate-800'
-                  }`} />
-                  <span className="truncate">{item.label}</span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  {item.restricted && (
-                    <span title="Restricted by RBAC (Click to test 403 response)" className="text-amber-500 opacity-80 group-hover:opacity-100">
-                      <Lock className="w-3.5 h-3.5" />
-                    </span>
-                  )}
-
-                  {item.badge !== undefined && (
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-semibold shrink-0 ${item.badgeColor || 'bg-slate-200 text-slate-800'}`}>
-                      {item.badge}
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </nav>
       </div>
 
-      {/* Bottom Health & Architecture Stamp */}
-      <div className="pt-3 border-t border-slate-200 space-y-2">
-        <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-600">
+      {/* Navigation Groups - Single Clean Scrollable List */}
+      <div className="flex-1 overflow-y-auto px-2.5 py-2.5 space-y-3.5">
+        {navGroups.map((group, gIdx) => (
+          <div key={gIdx} className="space-y-1">
+            <div className="px-2 text-[10px] font-mono font-bold text-slate-400 tracking-wider">
+              {group.title}
+            </div>
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = isCurrentActive(item);
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelect(item)}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all group cursor-pointer ${
+                      isActive
+                        ? 'bg-blue-600 text-white shadow-2xs font-semibold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Icon className={`w-3.5 h-3.5 shrink-0 transition-colors ${
+                        isActive ? 'text-white' : item.highlight ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'
+                      }`} />
+                      <span className="truncate text-xs">{item.label}</span>
+                    </div>
+
+                    {item.badge !== undefined && (
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-semibold shrink-0 ${item.badgeColor || 'bg-slate-200 text-slate-800'}`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom Health & System Stamp */}
+      <div className="p-3 border-t border-slate-200 space-y-1.5 shrink-0 bg-white">
+        {/* Mobile & APK Launch Button */}
+        <button
+          onClick={() => setShowMobileModal(true)}
+          className="w-full py-1.5 px-2.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-semibold flex items-center justify-between transition cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Smartphone className="w-3.5 h-3.5 text-blue-600" />
+            <span>Mobile Viewer & APK</span>
+          </div>
+          <span className="text-[10px] font-mono font-bold bg-blue-600 text-white px-1.5 py-0.2 rounded">
+            v3.0
+          </span>
+        </button>
+
+        <div className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[10px] font-mono text-slate-600">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-slate-700 font-semibold">
               <Radio className={`w-3 h-3 ${isOnline ? 'text-emerald-600 animate-pulse' : 'text-rose-600'}`} />
-              CRDT Telemetry
+              Dexie Storage
             </span>
-            <span className={`text-[10px] font-bold ${isOnline ? 'text-emerald-700' : 'text-rose-700'}`}>
-              {isOnline ? 'PASS' : 'OFFLINE'}
+            <span className={`font-bold ${isOnline ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {isOnline ? 'ONLINE' : 'OFFLINE'}
             </span>
           </div>
-          <p className="text-[10px] text-slate-500 mt-1 truncate">
-            Dexie IndexedDB • JWT Active
-          </p>
         </div>
 
-        <div className="flex items-center justify-between px-2 text-[10px] text-slate-500 font-medium">
-          <span>WA-1 Build v2.4</span>
-          <span className="flex items-center gap-1 text-slate-700 font-semibold">
+        <div className="flex items-center justify-between px-1 text-[10px] text-slate-400 font-mono">
+          <span>FIELD GUARD v3.0</span>
+          <span className="flex items-center gap-1 text-slate-600 font-semibold">
             <ShieldCheck className="w-3 h-3 text-blue-600" />
-            RBAC Secure
+            RBAC
           </span>
         </div>
       </div>
@@ -238,7 +322,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:block w-64 h-[calc(100vh-4rem)] sticky top-16 shrink-0 z-20 overflow-y-auto">
+      <aside className="hidden md:flex flex-col w-56 h-full shrink-0 z-20 bg-white border-r border-slate-200 overflow-hidden">
         {content}
       </aside>
 
@@ -246,14 +330,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isOpenMobile && (
         <div className="fixed inset-0 z-50 md:hidden flex">
           <div 
-            className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
             onClick={onCloseMobile}
           />
-          <div className="relative w-72 max-w-[80vw] h-full shadow-2xl animate-in slide-in-from-left duration-200">
+          <div className="relative w-64 max-w-[80vw] h-full shadow-2xl animate-in slide-in-from-left duration-200">
             {content}
           </div>
         </div>
       )}
+
+      {/* Mobile Viewer & APK Modal */}
+      <MobileViewerModal 
+        isOpen={showMobileModal} 
+        onClose={() => setShowMobileModal(false)} 
+      />
     </>
   );
 };

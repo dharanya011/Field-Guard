@@ -4,24 +4,18 @@ import {
   Clock, 
   CheckCircle2, 
   AlertTriangle, 
-  Wifi, 
   WifiOff, 
   RefreshCw, 
   Plus, 
-  ChevronRight, 
-  QrCode, 
-  Sparkles, 
   ShieldAlert, 
-  Layers,
-  ArrowUpRight,
-  Database,
-  MapPin,
-  Calendar,
-  Search,
-  Filter,
-  Flame,
-  PenTool,
-  CheckCircle
+  Layers, 
+  Search, 
+  PenTool, 
+  CheckCircle, 
+  Activity, 
+  AlertCircle,
+  QrCode,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useInspections } from '../../context/InspectionContext';
@@ -41,8 +35,8 @@ export const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({
   onNavigate
 }) => {
   const { currentUser } = useAuth();
-  const { inspections, conflicts, equipments } = useInspections();
-  const { isOnline, isSimulatedOffline, toggleSimulatedOffline, syncStatus, triggerManualSync, unsyncedChangesCount } = useNetwork();
+  const { inspections, conflicts, equipments, auditLogs } = useInspections();
+  const { isOnline, toggleSimulatedOffline, syncStatus, triggerManualSync } = useNetwork();
 
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ASSIGNED' | 'COMPLETED' | 'PENDING' | 'CONFLICTS' | 'PENDING_SYNC' | 'CRITICAL'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,32 +51,14 @@ export const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({
     i => i.assignedTechnicianId === currentUser?.id || i.technicianName.includes(currentUser?.name.split(' ')[0] || '')
   );
 
-  // 1. Assigned Count
+  // Metrics
   const assignedCount = myInspections.length;
-
-  // 2. Completed Count (PASSED or FAILED)
-  const completedCount = myInspections.filter(
-    i => i.status === 'PASSED' || i.status === 'FAILED'
-  ).length;
-
-  // 3. Pending Count (IN_PROGRESS, PENDING_REVIEW, DRAFT)
-  const pendingCount = myInspections.filter(
-    i => i.status === 'IN_PROGRESS' || i.status === 'PENDING_REVIEW' || i.status === 'DRAFT'
-  ).length;
-
-  // 4. Conflicts Count (CRDT conflicts or status CONFLICT)
+  const completedCount = myInspections.filter(i => i.status === 'PASSED' || i.status === 'FAILED').length;
+  const pendingCount = myInspections.filter(i => i.status === 'IN_PROGRESS' || i.status === 'PENDING_REVIEW' || i.status === 'DRAFT').length;
   const activeConflicts = conflicts.filter(c => c.status === 'ACTIVE');
-  const conflictInspectionsCount = myInspections.filter(i => i.status === 'CONFLICT').length + activeConflicts.length;
-
-  // 5. Pending Sync Count (syncState === 'PENDING' or offlineDraft)
-  const pendingSyncCount = myInspections.filter(
-    i => i.syncState === 'PENDING' || i.offlineDraft
-  ).length;
-
-  // 6. Critical Inspections Count (riskLevel === 'CRITICAL' or critical defects)
-  const criticalCount = myInspections.filter(
-    i => i.riskLevel === 'CRITICAL' || i.defects.some(d => d.severity === 'CRITICAL')
-  ).length;
+  const conflictCount = myInspections.filter(i => i.status === 'CONFLICT').length + activeConflicts.length;
+  const pendingSyncCount = myInspections.filter(i => i.syncState === 'PENDING' || i.offlineDraft).length;
+  const criticalCount = myInspections.filter(i => i.riskLevel === 'CRITICAL' || i.defects.some(d => d.severity === 'CRITICAL')).length;
 
   // Filtered Inspections for the list
   const filteredInspections = myInspections.filter((insp) => {
@@ -113,421 +89,452 @@ export const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({
     }
   });
 
-  const getPriorityBadgeStyle = (priority: RiskLevel) => {
+  const getPriorityBadge = (priority: RiskLevel) => {
     switch (priority) {
       case 'CRITICAL':
-        return 'bg-rose-100 text-rose-800 border-rose-300 ring-1 ring-rose-200';
+        return <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-100 text-rose-800 border border-rose-300">CRITICAL</span>;
       case 'HIGH':
-        return 'bg-orange-100 text-orange-800 border-orange-300';
+        return <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-orange-100 text-orange-800 border border-orange-300">HIGH</span>;
       case 'MEDIUM':
-        return 'bg-amber-100 text-amber-800 border-amber-300';
+        return <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-100 text-amber-800 border border-amber-300">MEDIUM</span>;
       case 'LOW':
-        return 'bg-slate-100 text-slate-700 border-slate-300';
-      default:
-        return 'bg-slate-100 text-slate-700 border-slate-300';
+        return <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300">LOW</span>;
     }
   };
 
-  const formatInspectionTime = (dateStr: string, completedDate?: string) => {
-    try {
-      if (completedDate) {
-        const d = new Date(completedDate);
-        return `Completed: ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-      }
-      const d = new Date(dateStr);
-      return `Scheduled: ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } catch {
-      return dateStr;
-    }
-  };
+  // Needs Attention items
+  const needsAttentionItems = myInspections.filter(i => 
+    i.riskLevel === 'CRITICAL' || 
+    i.status === 'CONFLICT' || 
+    i.status === 'FAILED' || 
+    i.syncState === 'PENDING' || 
+    i.offlineDraft
+  ).slice(0, 5);
+
+  // Recent activity logs (for technician)
+  const recentLogs = auditLogs
+    .filter(l => l.userName.includes(currentUser?.name.split(' ')[0] || '') || l.userRole === 'TECHNICIAN')
+    .slice(0, 5);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 font-sans">
-      {/* Top Banner & Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50/40 to-white border border-blue-100 shadow-2xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-100 text-blue-800 border border-blue-200">
-              FIELD TECHNICIAN WORKSPACE
-            </span>
-            <span className="text-xs text-slate-500 font-mono">
-              Badge: {currentUser?.badgeNumber}
+    <div className="space-y-4 max-w-7xl mx-auto pb-12 font-sans select-none">
+      {/* 1. Header Row: Welcome + Role + Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight font-display whitespace-nowrap">
+              Good day, {currentUser?.name}
+            </h1>
+            <span className="px-2 py-0.5 text-[11px] font-mono font-bold rounded-md bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+              Field Operations Technician • {currentUser?.badgeNumber}
             </span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight font-display">
-            Welcome back, {currentUser?.name}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-            All inspection forms and measurements are cached locally via <strong className="text-slate-900 font-semibold">Dexie IndexedDB</strong>. You can perform full mobile inspections without cell signal.
+          <p className="text-xs text-slate-500 mt-0.5">
+            Offline cache ready via Dexie IndexedDB. All field data persists locally and syncs automatically.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             onClick={onOpenNewModal}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-500/20 active:scale-95 transition"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-2xs active:scale-95 transition cursor-pointer whitespace-nowrap"
           >
-            <Plus className="w-4 h-4" />
-            <span>New Inspection</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Start Inspection</span>
           </button>
 
           <button
-            onClick={() => onNavigate('sync')}
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition"
-            title="Inspect Dexie.js local storage"
+            onClick={() => onNavigate('equipment')}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap"
           >
-            <Database className="w-4 h-4 text-blue-600" />
-            <span className="hidden sm:inline">Offline DB</span>
+            <Layers className="w-3.5 h-3.5 text-slate-600" />
+            <span>Equipment</span>
+          </button>
+
+          <button
+            onClick={triggerManualSync}
+            disabled={!isOnline || syncStatus === 'SYNCING'}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold shadow-2xs transition cursor-pointer disabled:opacity-60 whitespace-nowrap"
+            title="Sync changes with server"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
+            <span>Sync Now</span>
           </button>
         </div>
       </div>
 
-      {/* Offline Status Alert if offline */}
+      {/* Offline Alert if offline */}
       {!isOnline && (
-        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-3 text-amber-900 shadow-2xs animate-in fade-in">
-          <div className="flex items-center gap-2.5">
-            <WifiOff className="w-5 h-5 text-amber-600 shrink-0" />
-            <div className="text-xs">
-              <span className="font-bold text-amber-950">Offline Field Mode Active: </span>
-              All checklist updates, tolerances, and defect photos will save directly into browser IndexedDB storage and sync automatically once connectivity is restored.
-            </div>
+        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-between gap-3 text-amber-900 text-xs shadow-2xs">
+          <div className="flex items-center gap-2">
+            <WifiOff className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong className="font-semibold text-amber-950">Offline Field Mode: </strong>
+              All checklist responses, measurements, and photos are saved to local IndexedDB.
+            </span>
           </div>
           <button
             onClick={toggleSimulatedOffline}
-            className="px-2.5 py-1 rounded-lg bg-amber-200 hover:bg-amber-300 text-[11px] font-semibold text-amber-950 whitespace-nowrap transition"
+            className="px-2 py-0.5 rounded bg-amber-200 hover:bg-amber-300 text-[11px] font-bold text-amber-950 whitespace-nowrap"
           >
             Go Online
           </button>
         </div>
       )}
 
-      {/* ATTRACTIVE CARDS (Assigned, Completed, Pending, Conflicts, Pending Sync, Critical) */}
-      <div>
-        <div className="flex items-center justify-between mb-3 px-1">
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">
-            Inspection Performance Metrics
-          </h2>
-          <span className="text-[11px] text-slate-400">
-            Tap any card to filter list
-          </span>
+      {/* 2. Compact KPI Section (6 Cards) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        {/* Assigned */}
+        <div 
+          onClick={() => setActiveFilter(activeFilter === 'ASSIGNED' ? 'ALL' : 'ASSIGNED')}
+          className={`p-3 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+            activeFilter === 'ASSIGNED' ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-300' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700">Assigned</span>
+            <ClipboardCheck className="w-3.5 h-3.5 text-blue-600" />
+          </div>
+          <p className="text-xl font-bold text-slate-900 font-mono">{assignedCount}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Work orders</p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-          {/* 1. ASSIGNED CARD */}
-          <div 
-            onClick={() => setActiveFilter(activeFilter === 'ASSIGNED' ? 'ALL' : 'ASSIGNED')}
-            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs group ${
-              activeFilter === 'ASSIGNED' 
-                ? 'bg-blue-50/80 border-blue-400 ring-2 ring-blue-200' 
-                : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-xs'
-            }`}
-          >
-            <div className="flex items-center justify-between text-slate-500 mb-2">
-              <span className="text-xs font-bold text-slate-700">Assigned</span>
-              <ClipboardCheck className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-slate-900 font-mono tracking-tight">
-              {assignedCount}
-            </p>
-            <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
-              <span>Work orders</span>
-              {activeFilter === 'ASSIGNED' && (
-                <span className="text-[10px] font-bold text-blue-600 font-mono">FILTERED</span>
-              )}
-            </div>
+        {/* Completed */}
+        <div 
+          onClick={() => setActiveFilter(activeFilter === 'COMPLETED' ? 'ALL' : 'COMPLETED')}
+          className={`p-3 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+            activeFilter === 'COMPLETED' ? 'bg-emerald-50 border-emerald-400 ring-1 ring-emerald-300' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700">Completed</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           </div>
+          <p className="text-xl font-bold text-emerald-700 font-mono">{completedCount}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Passed / Final</p>
+        </div>
 
-          {/* 2. COMPLETED CARD */}
-          <div 
-            onClick={() => setActiveFilter(activeFilter === 'COMPLETED' ? 'ALL' : 'COMPLETED')}
-            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs group ${
-              activeFilter === 'COMPLETED' 
-                ? 'bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-200' 
-                : 'bg-white border-slate-200 hover:border-emerald-300 hover:shadow-xs'
-            }`}
-          >
-            <div className="flex items-center justify-between text-slate-500 mb-2">
-              <span className="text-xs font-bold text-slate-700">Completed</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-emerald-700 font-mono tracking-tight">
-              {completedCount}
-            </p>
-            <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
-              <span>Passed / Final</span>
-              {activeFilter === 'COMPLETED' && (
-                <span className="text-[10px] font-bold text-emerald-600 font-mono">FILTERED</span>
-              )}
-            </div>
+        {/* Pending */}
+        <div 
+          onClick={() => setActiveFilter(activeFilter === 'PENDING' ? 'ALL' : 'PENDING')}
+          className={`p-3 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+            activeFilter === 'PENDING' ? 'bg-amber-50 border-amber-400 ring-1 ring-amber-300' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700">Pending</span>
+            <Clock className="w-3.5 h-3.5 text-amber-600" />
           </div>
+          <p className="text-xl font-bold text-amber-700 font-mono">{pendingCount}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">In progress</p>
+        </div>
 
-          {/* 3. PENDING CARD */}
-          <div 
-            onClick={() => setActiveFilter(activeFilter === 'PENDING' ? 'ALL' : 'PENDING')}
-            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs group ${
-              activeFilter === 'PENDING' 
-                ? 'bg-amber-50/80 border-amber-400 ring-2 ring-amber-200' 
-                : 'bg-white border-slate-200 hover:border-amber-300 hover:shadow-xs'
-            }`}
-          >
-            <div className="flex items-center justify-between text-slate-500 mb-2">
-              <span className="text-xs font-bold text-slate-700">Pending</span>
-              <Clock className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-amber-700 font-mono tracking-tight">
-              {pendingCount}
-            </p>
-            <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
-              <span>In progress</span>
-              {activeFilter === 'PENDING' && (
-                <span className="text-[10px] font-bold text-amber-600 font-mono">FILTERED</span>
-              )}
-            </div>
+        {/* Conflicts */}
+        <div 
+          onClick={() => setActiveFilter(activeFilter === 'CONFLICTS' ? 'ALL' : 'CONFLICTS')}
+          className={`p-3 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+            activeFilter === 'CONFLICTS' ? 'bg-rose-50 border-rose-400 ring-1 ring-rose-300' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700">Conflicts</span>
+            <AlertTriangle className={`w-3.5 h-3.5 ${conflictCount > 0 ? 'text-rose-600' : 'text-slate-400'}`} />
           </div>
+          <p className={`text-xl font-bold font-mono ${conflictCount > 0 ? 'text-rose-700' : 'text-slate-900'}`}>{conflictCount}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">CRDT diverged</p>
+        </div>
 
-          {/* 4. CONFLICTS CARD */}
-          <div 
-            onClick={() => setActiveFilter(activeFilter === 'CONFLICTS' ? 'ALL' : 'CONFLICTS')}
-            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs group ${
-              activeFilter === 'CONFLICTS' 
-                ? 'bg-rose-50/80 border-rose-400 ring-2 ring-rose-200' 
-                : 'bg-white border-slate-200 hover:border-rose-300 hover:shadow-xs'
-            }`}
-          >
-            <div className="flex items-center justify-between text-slate-500 mb-2">
-              <span className="text-xs font-bold text-slate-700">Conflicts</span>
-              <AlertTriangle className={`w-4 h-4 ${conflictInspectionsCount > 0 ? 'text-rose-600 animate-pulse' : 'text-slate-400'}`} />
-            </div>
-            <p className={`text-2xl sm:text-3xl font-bold font-mono tracking-tight ${conflictInspectionsCount > 0 ? 'text-rose-700' : 'text-slate-900'}`}>
-              {conflictInspectionsCount}
-            </p>
-            <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
-              <span>CRDT diverged</span>
-              {activeFilter === 'CONFLICTS' && (
-                <span className="text-[10px] font-bold text-rose-600 font-mono">FILTERED</span>
-              )}
-            </div>
+        {/* Pending Sync */}
+        <div 
+          onClick={() => setActiveFilter(activeFilter === 'PENDING_SYNC' ? 'ALL' : 'PENDING_SYNC')}
+          className={`p-3 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+            activeFilter === 'PENDING_SYNC' ? 'bg-sky-50 border-sky-400 ring-1 ring-sky-300' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700">Pending Sync</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${pendingSyncCount > 0 ? 'text-sky-600' : 'text-slate-400'}`} />
           </div>
+          <p className="text-xl font-bold text-sky-800 font-mono">{pendingSyncCount}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">In local DB</p>
+        </div>
 
-          {/* 5. PENDING SYNC CARD */}
-          <div 
-            onClick={() => setActiveFilter(activeFilter === 'PENDING_SYNC' ? 'ALL' : 'PENDING_SYNC')}
-            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs group ${
-              activeFilter === 'PENDING_SYNC' 
-                ? 'bg-sky-50/80 border-sky-400 ring-2 ring-sky-200' 
-                : 'bg-white border-slate-200 hover:border-sky-300 hover:shadow-xs'
-            }`}
-          >
-            <div className="flex items-center justify-between text-slate-500 mb-2">
-              <span className="text-xs font-bold text-slate-700">Pending Sync</span>
-              <RefreshCw className={`w-4 h-4 ${pendingSyncCount > 0 ? 'text-sky-600' : 'text-slate-400'}`} />
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-sky-800 font-mono tracking-tight">
-              {pendingSyncCount}
-            </p>
-            <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
-              <span>In IndexedDB</span>
-              {activeFilter === 'PENDING_SYNC' && (
-                <span className="text-[10px] font-bold text-sky-600 font-mono">FILTERED</span>
-              )}
-            </div>
+        {/* Critical Risk */}
+        <div 
+          onClick={() => setActiveFilter(activeFilter === 'CRITICAL' ? 'ALL' : 'CRITICAL')}
+          className={`p-3 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+            activeFilter === 'CRITICAL' ? 'bg-rose-50 border-rose-400 ring-1 ring-rose-300' : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700">Critical</span>
+            <ShieldAlert className={`w-3.5 h-3.5 ${criticalCount > 0 ? 'text-rose-600' : 'text-slate-400'}`} />
           </div>
-
-          {/* 6. CRITICAL INSPECTIONS CARD */}
-          <div 
-            onClick={() => setActiveFilter(activeFilter === 'CRITICAL' ? 'ALL' : 'CRITICAL')}
-            className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs group ${
-              activeFilter === 'CRITICAL' 
-                ? 'bg-rose-50/80 border-rose-400 ring-2 ring-rose-200' 
-                : 'bg-white border-slate-200 hover:border-rose-300 hover:shadow-xs'
-            }`}
-          >
-            <div className="flex items-center justify-between text-slate-500 mb-2">
-              <span className="text-xs font-bold text-slate-700">Critical</span>
-              <ShieldAlert className={`w-4 h-4 ${criticalCount > 0 ? 'text-rose-600' : 'text-slate-400'}`} />
-            </div>
-            <p className={`text-2xl sm:text-3xl font-bold font-mono tracking-tight ${criticalCount > 0 ? 'text-rose-700' : 'text-slate-900'}`}>
-              {criticalCount}
-            </p>
-            <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
-              <span>Severe risk</span>
-              {activeFilter === 'CRITICAL' && (
-                <span className="text-[10px] font-bold text-rose-600 font-mono">FILTERED</span>
-              )}
-            </div>
-          </div>
+          <p className={`text-xl font-bold font-mono ${criticalCount > 0 ? 'text-rose-700' : 'text-slate-900'}`}>{criticalCount}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">High severity</p>
         </div>
       </div>
 
-      {/* INSPECTION LIST (Each card shows Equipment name, ID, Location, Time, Priority, Status, Sync status) */}
-      <div className="space-y-4">
-        {/* Filter and Search Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight font-display">
-              Field Work Orders & Inspection Roster
-            </h2>
-            <span className="px-2.5 py-0.5 text-xs font-mono font-bold rounded-full bg-slate-100 text-slate-800 border border-slate-200">
-              {filteredInspections.length} of {myInspections.length}
-            </span>
-          </div>
+      {/* 3. Main Content: 2-Column Layout (65% Left / 35% Right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* LEFT COLUMN: ~65% (lg:col-span-8) - Inspection Work Orders */}
+        <div className="lg:col-span-8 space-y-3">
+          <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
+            {/* Header + Search Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-slate-900 font-display">
+                  Inspection Work Orders
+                </h2>
+                <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-slate-100 text-slate-700 border border-slate-200">
+                  {filteredInspections.length} of {myInspections.length}
+                </span>
+              </div>
 
-          <div className="flex items-center gap-2">
-            {/* Search Input */}
-            <div className="relative flex-1 sm:w-64">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search equipment, tag, zone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-2xs"
-              />
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 sm:w-56">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search equipment, tag..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-8 pr-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+
+                {activeFilter !== 'ALL' && (
+                  <button
+                    onClick={() => setActiveFilter('ALL')}
+                    className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold whitespace-nowrap"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Clear Filter if active */}
-            {activeFilter !== 'ALL' && (
-              <button
-                onClick={() => setActiveFilter('ALL')}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold whitespace-nowrap transition"
-              >
-                Clear Filter
-              </button>
+            {/* Table / List View */}
+            {filteredInspections.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 space-y-1.5">
+                <ClipboardCheck className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-xs font-semibold text-slate-700">No work orders match the selected filter.</p>
+                <button
+                  onClick={() => { setActiveFilter('ALL'); setSearchTerm(''); }}
+                  className="px-2.5 py-1 rounded bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-[10px] font-mono text-slate-400 border-b border-slate-100">
+                      <th className="py-2 px-2 font-bold">ID / CODE</th>
+                      <th className="py-2 px-2 font-bold">EQUIPMENT</th>
+                      <th className="py-2 px-2 font-bold">STATUS</th>
+                      <th className="py-2 px-2 font-bold">RISK</th>
+                      <th className="py-2 px-2 font-bold">SYNC</th>
+                      <th className="py-2 px-2 font-bold text-right">ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredInspections.map((insp) => {
+                      const eq = getEquipmentDetails(insp.equipmentId);
+                      const isPendingSync = insp.syncState === 'PENDING' || insp.offlineDraft;
+
+                      return (
+                        <tr 
+                          key={insp.id} 
+                          onClick={() => onSelectInspection(insp)}
+                          className="hover:bg-blue-50/50 transition cursor-pointer group"
+                        >
+                          <td className="py-2.5 px-2">
+                            <span className="font-mono font-bold text-blue-700 group-hover:underline">
+                              {insp.code}
+                            </span>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {insp.id.slice(0, 8)}
+                            </div>
+                          </td>
+
+                          <td className="py-2.5 px-2">
+                            <div className="font-bold text-slate-900 group-hover:text-blue-600 truncate max-w-[140px] sm:max-w-[180px]">
+                              {insp.equipmentName}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              {eq?.tag || insp.equipmentId} • {insp.facility}
+                            </div>
+                          </td>
+
+                          <td className="py-2.5 px-2">
+                            <StatusBadge status={insp.status} size="sm" />
+                          </td>
+
+                          <td className="py-2.5 px-2">
+                            {getPriorityBadge(insp.riskLevel)}
+                          </td>
+
+                          <td className="py-2.5 px-2">
+                            {isPendingSync ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                <RefreshCw className="w-2.5 h-2.5 text-amber-600" />
+                                PENDING
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                                SYNCED
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-2.5 px-2 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectInspection(insp);
+                              }}
+                              className="px-2.5 py-1 rounded bg-slate-100 group-hover:bg-blue-600 group-hover:text-white text-slate-700 text-[11px] font-bold transition shadow-2xs cursor-pointer"
+                            >
+                              {insp.status === 'DRAFT' || insp.status === 'IN_PROGRESS' ? 'Inspect' : 'Review'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
+          </div>
+
+          {/* Quick Scanner & AI Diagnostic Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <QrCode className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">QR Asset Scanner</p>
+                  <p className="text-[10px] text-slate-500">Scan tag for instant audit form</p>
+                </div>
+              </div>
+              <button
+                onClick={onOpenNewModal}
+                className="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold text-xs shadow-2xs hover:bg-blue-700 shrink-0 cursor-pointer"
+              >
+                Scan Tag
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/50 to-indigo-50/30 border border-blue-200 shadow-2xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">Gemini Field Diagnostic</p>
+                  <p className="text-[10px] text-slate-600">Query ISO vibration or lockout safety</p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate('ai-assistant')}
+                className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-blue-600 font-bold text-xs shadow-2xs shrink-0 cursor-pointer"
+              >
+                Ask AI
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Inspection List Cards */}
-        {filteredInspections.length === 0 ? (
-          <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 space-y-2">
-            <ClipboardCheck className="w-10 h-10 text-slate-300 mx-auto" />
-            <p className="text-sm font-semibold text-slate-700">No inspections match current criteria.</p>
-            <p className="text-xs text-slate-400">Try changing your search terms or resetting the filter card selection.</p>
-            <button
-              onClick={() => { setActiveFilter('ALL'); setSearchTerm(''); }}
-              className="mt-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold"
-            >
-              Reset Filters
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredInspections.map((insp) => {
-              const eq = getEquipmentDetails(insp.equipmentId);
-              const equipmentIdDisplay = eq?.tag || insp.equipmentId;
-              const locationDisplay = `${insp.facility} • ${insp.zone}`;
-              const timeDisplay = formatInspectionTime(insp.scheduledDate, insp.completedDate);
-              const priority = insp.riskLevel;
+        {/* RIGHT COLUMN: ~35% (lg:col-span-4) - Needs Attention & Recent Activity */}
+        <div className="lg:col-span-4 space-y-3">
+          {/* 1. Needs Attention Card */}
+          <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-rose-600" />
+                <h3 className="text-xs font-bold text-slate-900 font-display uppercase tracking-wider">
+                  Needs Attention
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                {needsAttentionItems.length}
+              </span>
+            </div>
 
-              return (
-                <div
-                  key={insp.id}
-                  onClick={() => onSelectInspection(insp)}
-                  className="p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer shadow-2xs flex flex-col justify-between group relative overflow-hidden"
-                >
-                  {/* Card Top Row: Equipment Name & Status Pills */}
-                  <div>
-                    <div className="flex items-start justify-between gap-3 mb-2.5">
-                      <div className="flex-1 min-w-0">
-                        {/* 1. Equipment Name */}
-                        <h3 className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition truncate font-display">
-                          {insp.equipmentName}
-                        </h3>
-                        {/* 2. Equipment ID */}
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                            ID: {equipmentIdDisplay}
-                          </span>
-                          <span className="text-slate-300">•</span>
-                          <span className="text-[11px] font-mono text-blue-600 font-semibold">
-                            {insp.code}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 5. Priority Badge */}
-                      <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-mono font-extrabold uppercase shrink-0 border ${getPriorityBadgeStyle(priority)}`}>
-                        {priority}
+            {needsAttentionItems.length === 0 ? (
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 text-center text-xs text-slate-500">
+                <CheckCircle className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
+                <span>All inspections in compliance</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {needsAttentionItems.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => onSelectInspection(item)}
+                    className="p-2.5 rounded-lg bg-slate-50 hover:bg-rose-50/60 border border-slate-200 hover:border-rose-200 transition cursor-pointer text-xs space-y-1 group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 group-hover:text-rose-700 truncate">
+                        {item.equipmentName}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {item.code}
                       </span>
                     </div>
 
-                    {/* Inspection Metadata: 3. Location & 4. Inspection Time */}
-                    <div className="space-y-1.5 py-2.5 border-t border-slate-100 text-xs text-slate-600">
-                      {/* 3. Location */}
-                      <div className="flex items-center gap-2 text-slate-700">
-                        <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        <span className="truncate font-medium">{locationDisplay}</span>
-                      </div>
-
-                      {/* 4. Inspection Time */}
-                      <div className="flex items-center gap-2 text-slate-500">
-                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="font-mono text-[11px]">{timeDisplay}</span>
-                      </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">
+                        {item.riskLevel === 'CRITICAL' ? '⚠️ Critical risk defect' : item.status === 'FAILED' ? '❌ Inspection failed' : item.syncState === 'PENDING' ? '⏳ Pending local sync' : 'Diverged conflict'}
+                      </span>
+                      <span className="text-blue-600 font-semibold group-hover:underline text-[10px]">
+                        Open &rarr;
+                      </span>
                     </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-                  {/* Card Bottom Row: 6. Status, 7. Sync Status & Action CTA */}
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {/* 6. Status */}
-                      <StatusBadge status={insp.status} size="sm" />
+          {/* 2. Recent Activity Card */}
+          <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-1.5">
+                <Activity className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xs font-bold text-slate-900 font-display uppercase tracking-wider">
+                  Recent Activity
+                </h3>
+              </div>
+              <button
+                onClick={() => onNavigate('audit')}
+                className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+              >
+                View Log
+              </button>
+            </div>
 
-                      {/* 7. Sync Status */}
-                      <StatusBadge status={insp.syncState} size="sm" />
-                    </div>
-
-                    {/* Launch Inspection CTA */}
-                    <div className="flex items-center gap-1 text-xs font-bold text-blue-600 group-hover:translate-x-1 transition-transform shrink-0">
-                      <span>Inspect</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </div>
+            <div className="space-y-2.5">
+              {recentLogs.map((log) => (
+                <div key={log.id} className="flex items-start gap-2 text-xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 mt-1.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-slate-800 font-medium truncate">
+                      {log.action}
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-mono">
+                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {log.details}
+                    </p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Field Inspection Bottom Tool Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-        {/* QR Scanner Tool */}
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <QrCode className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-900">QR Asset Scanner</p>
-              <p className="text-[11px] text-slate-500">Scan equipment barcode to jump directly into audit form</p>
+              ))}
             </div>
           </div>
-          <button
-            onClick={onOpenNewModal}
-            className="px-3 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-2xs hover:bg-blue-700 shrink-0"
-          >
-            Scan Tag
-          </button>
-        </div>
-
-        {/* AI Field Assistant Quick Prompt */}
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/50 to-indigo-50/30 border border-blue-200 shadow-2xs flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-900">Gemini Field Diagnostic</p>
-              <p className="text-[11px] text-slate-600">Query ISO vibration limits or safety lockout guidelines</p>
-            </div>
-          </div>
-          <button
-            onClick={() => onNavigate('ai-assistant')}
-            className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-blue-600 font-bold text-xs shadow-2xs shrink-0"
-          >
-            Ask AI
-          </button>
         </div>
       </div>
     </div>

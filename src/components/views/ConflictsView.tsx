@@ -15,10 +15,14 @@ import {
   Edit3,
   X,
   Check,
-  Shield
+  Shield,
+  RefreshCw,
+  GitFork,
+  Zap
 } from 'lucide-react';
 import { useInspections } from '../../context/InspectionContext';
 import { useAuth } from '../../context/AuthContext';
+import { useNetwork } from '../../context/NetworkContext';
 import { ApiClient } from '../../services/api';
 import { StatusBadge } from '../common/StatusBadge';
 import type { ConflictItem, EvidencePhoto, InspectionGpsLocation } from '../../types';
@@ -26,6 +30,7 @@ import type { ConflictItem, EvidencePhoto, InspectionGpsLocation } from '../../t
 export const ConflictsView: React.FC = () => {
   const { conflicts, resolveConflictItem } = useInspections();
   const { currentUser } = useAuth();
+  const { isOnline, syncStatus, triggerManualSync } = useNetwork();
   const [selectedConflict, setSelectedConflict] = useState<ConflictItem | null>(conflicts[0] || null);
   const [resolutionNotice, setResolutionNotice] = useState<string | null>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
@@ -112,6 +117,11 @@ export const ConflictsView: React.FC = () => {
     setShowManualModal(true);
   };
 
+  const handleAutoResolveNonConflicting = async () => {
+    if (!selectedConflict) return;
+    await handleResolve(selectedConflict.id, 'USE_LOCAL', selectedConflict.localValue, 'Auto-resolved safe non-conflicting field entry');
+  };
+
   const renderEvidencePhotos = (evidence?: EvidencePhoto[] | string) => {
     if (!evidence) return null;
     if (typeof evidence === 'string') {
@@ -161,28 +171,36 @@ export const ConflictsView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-rose-50 via-amber-50/40 to-white border border-rose-200 shadow-sm">
+    <div className="space-y-5 max-w-7xl mx-auto pb-12 font-sans select-none">
+      {/* 1. Header Row: Title & Subtitle on left, Action Buttons on right */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-rose-100 text-rose-800 border border-rose-200">
-              SUPERVISOR CONFLICT CENTER
-            </span>
-            <span className="text-xs text-slate-500 font-mono">
-              WA-1 Authority Sign-Off
-            </span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1.5 tracking-tight font-display">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight font-display">
             Field Conflict Resolution Console
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
-            When field technicians enter contradicting evaluations or offline replicas diverge, both entries are preserved with full user metadata, timestamps, notes, evidence photos, GPS, and operation IDs. The supervisor makes the final decision.
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            When field technicians enter contradicting evaluations or offline replicas diverge, supervisor authoritative merge ensures zero data loss.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <StatusBadge status={activeConflicts.length > 0 ? 'CONFLICT' : 'SYNCED'} size="md" />
+        <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto">
+          <button
+            onClick={() => handleAutoResolveNonConflicting()}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-2xs active:scale-95 transition cursor-pointer"
+          >
+            <Zap className="w-4 h-4" />
+            <span>Auto-Resolve Safe</span>
+          </button>
+
+          <button
+            onClick={triggerManualSync}
+            disabled={!isOnline || syncStatus === 'SYNCING'}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition cursor-pointer disabled:opacity-50"
+            title="Synchronize peer updates"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
+            <span>Sync Peer Updates</span>
+          </button>
         </div>
       </div>
 

@@ -297,6 +297,9 @@ export class ApiClient {
   /**
    * Complete chunked media upload
    */
+  /**
+   * Complete chunked media upload
+   */
   public static async completeMediaUpload(uploadId: string) {
     return this.request<{
       success: boolean;
@@ -314,16 +317,167 @@ export class ApiClient {
   }
 
   /**
+   * Equipment API endpoints
+   */
+  public static async getAllEquipment() {
+    return this.request<{ success: boolean; count: number; equipment: any[] }>('/api/equipment', {
+      method: 'GET'
+    });
+  }
+
+  public static async createEquipment(payload: Record<string, unknown>) {
+    return this.request<{ success: boolean; message: string; equipment: any }>('/api/equipment', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  public static async updateEquipment(id: string, payload: Record<string, unknown>) {
+    return this.request<{ success: boolean; message: string; equipment: any }>(`/api/equipment/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  public static async deleteEquipment(id: string) {
+    return this.request<{ success: boolean; message: string }>(`/api/equipment/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  /**
+   * User Management API endpoints
+   */
+  public static async createUser(payload: Record<string, unknown>) {
+    return this.request<{ success: boolean; message: string; user: User }>('/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  public static async updateUser(id: string, payload: Record<string, unknown>) {
+    return this.request<{ success: boolean; message: string; user: User }>(`/api/admin/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  public static async deleteUser(id: string) {
+    return this.request<{ success: boolean; message: string }>(`/api/admin/users/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  /**
+   * Real Analytics Aggregator endpoint
+   */
+  public static async getAnalytics() {
+    return this.request<{ success: boolean; analytics: any }>('/api/analytics', {
+      method: 'GET'
+    });
+  }
+
+  /**
+   * Tasks Management endpoints
+   */
+  public static async getTasks() {
+    return this.request<{ success: boolean; count: number; tasks: any[] }>('/api/tasks', {
+      method: 'GET'
+    });
+  }
+
+  public static async createTask(payload: Record<string, unknown>) {
+    return this.request<{ success: boolean; task: any }>('/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  public static async updateTask(id: string, payload: Record<string, unknown>) {
+    return this.request<{ success: boolean; task: any }>(`/api/tasks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  public static async deleteTask(id: string) {
+    return this.request<{ success: boolean; message: string }>(`/api/tasks/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  /**
+   * Notifications endpoints
+   */
+  public static async getNotifications() {
+    return this.request<{ success: boolean; notifications: any[] }>('/api/notifications', {
+      method: 'GET'
+    });
+  }
+
+  public static async markNotificationRead(id: string) {
+    return this.request<{ success: boolean }>(`/api/notifications/${id}/read`, {
+      method: 'POST'
+    });
+  }
+
+  /**
+   * Settings endpoints
+   */
+  public static async getAdminSettings() {
+    return this.request<{ success: boolean; settings: Record<string, unknown> }>('/api/admin/settings', {
+      method: 'GET'
+    });
+  }
+
+  /**
+   * Fetch AI Health & Configuration Status
+   */
+  public static async getAiHealth() {
+    return this.request<{
+      gemini: boolean;
+      fallback: boolean;
+      geminiConfigured: boolean;
+      status: 'GEMINI AI — ONLINE' | 'GEMINI NOT CONFIGURED';
+      model: string;
+    }>('/api/ai/health', {
+      method: 'GET'
+    });
+  }
+
+  /**
    * Fetch AI Configuration Status
    */
   public static async getAiStatus() {
     return this.request<{
       success: boolean;
+      gemini: boolean;
       geminiConfigured: boolean;
       status: 'GEMINI AI — ONLINE' | 'GEMINI NOT CONFIGURED';
       model: string;
     }>('/api/ai/status', {
       method: 'GET'
+    });
+  }
+
+  /**
+   * Real Full-Stack Chat API with Conversation Context & Memory
+   */
+  public static async chatAi(payload: {
+    message: string;
+    conversationId?: string;
+    history?: Array<{ role: 'user' | 'model'; text: string }>;
+  }) {
+    return this.request<{
+      success: boolean;
+      message: string;
+      conversationId?: string;
+      source: 'GEMINI' | 'LOCAL_FALLBACK';
+      geminiConfigured: boolean;
+      role: string;
+    }>('/api/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify(payload)
     });
   }
 

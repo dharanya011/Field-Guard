@@ -16,36 +16,79 @@ interface AuthContextType {
   hasRole: (allowedRoles: UserRole | UserRole[]) => boolean;
   hasPermission: (permission: keyof UserPermissions) => boolean;
   usersList: User[];
+  createUser: (userData: Partial<User>) => Promise<User>;
+  updateUser: (id: string, updates: Partial<User>) => Promise<User>;
+  deleteUser: (id: string) => Promise<void>;
   authError: string | null;
   clearAuthError: () => void;
+  refreshUsers: () => Promise<void>;
 }
+
+export const FOUR_REAL_USERS: { id: string; name: string; email: string; pass: string; role: UserRole; title: string; badgeNumber: string }[] = [
+  {
+    id: 'usr-tech-01',
+    name: 'Alex Vance',
+    email: 'tech1@fieldguard.io',
+    pass: 'Tech1Pass123!',
+    role: 'TECHNICIAN',
+    title: 'Lead Field Specialist',
+    badgeNumber: 'WA-TECH-01'
+  },
+  {
+    id: 'usr-tech-02',
+    name: 'David Chen',
+    email: 'tech2@fieldguard.io',
+    pass: 'Tech2Pass123!',
+    role: 'TECHNICIAN',
+    title: 'NDT Inspection Specialist',
+    badgeNumber: 'WA-TECH-02'
+  },
+  {
+    id: 'usr-sup-01',
+    name: 'Marcus Reid',
+    email: 'supervisor@fieldguard.io',
+    pass: 'SupervisorPass123!',
+    role: 'SUPERVISOR',
+    title: 'Regional Field Operations Director',
+    badgeNumber: 'WA-SUP-01'
+  },
+  {
+    id: 'usr-adm-01',
+    name: 'Elena Rostova',
+    email: 'admin@fieldguard.io',
+    pass: 'AdminPass123!',
+    role: 'ADMIN',
+    title: 'Chief Reliability Administrator',
+    badgeNumber: 'WA-ADM-01'
+  }
+];
 
 export const PRESET_CREDENTIALS: Record<UserRole, { email: string; pass: string; name: string }> = {
   TECHNICIAN: {
-    email: 'alex.vance@wa1-field.internal',
-    pass: 'TechPass123!',
+    email: 'tech1@fieldguard.io',
+    pass: 'Tech1Pass123!',
     name: 'Alex Vance'
   },
   SUPERVISOR: {
-    email: 'marcus.reid@wa1-field.internal',
+    email: 'supervisor@fieldguard.io',
     pass: 'SupervisorPass123!',
     name: 'Marcus Reid'
   },
   ADMIN: {
-    email: 'elena.rostova@wa1-field.internal',
+    email: 'admin@fieldguard.io',
     pass: 'AdminPass123!',
     name: 'Elena Rostova'
   }
 };
 
-export const PRESET_USERS: Record<UserRole, User> = {
-  TECHNICIAN: {
+export const PRESET_USERS: Record<string, User> = {
+  'usr-tech-01': {
     id: 'usr-tech-01',
     name: 'Alex Vance',
-    email: 'alex.vance@wa1-field.internal',
+    email: 'tech1@fieldguard.io',
     role: 'TECHNICIAN',
     title: 'Lead Field Specialist',
-    badgeNumber: 'WA-TECH-042',
+    badgeNumber: 'WA-TECH-01',
     certificationLevel: 'Level III Ultrasonic & Vibration Specialist (ISO 9712)',
     lastActive: 'Just now',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&h=120&q=80',
@@ -62,13 +105,36 @@ export const PRESET_USERS: Record<UserRole, User> = {
       canViewAuditLogs: false
     }
   },
-  SUPERVISOR: {
+  'usr-tech-02': {
+    id: 'usr-tech-02',
+    name: 'David Chen',
+    email: 'tech2@fieldguard.io',
+    role: 'TECHNICIAN',
+    title: 'NDT Inspection Specialist',
+    badgeNumber: 'WA-TECH-02',
+    certificationLevel: 'Level II Non-Destructive Testing Specialist (ASNT)',
+    lastActive: '5 min ago',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&h=120&q=80',
+    permissions: {
+      canResolveConflicts: false,
+      canManageUsers: false,
+      canChangeSettings: false,
+      canApproveInspections: false,
+      canViewAnalytics: false,
+      canManageEquipment: false,
+      canManageRoles: false,
+      canPerformInspections: true,
+      canUseAIAssistant: true,
+      canViewAuditLogs: false
+    }
+  },
+  'usr-sup-01': {
     id: 'usr-sup-01',
     name: 'Marcus Reid',
-    email: 'marcus.reid@wa1-field.internal',
+    email: 'supervisor@fieldguard.io',
     role: 'SUPERVISOR',
-    title: 'Regional Field Director',
-    badgeNumber: 'WA-SUP-018',
+    title: 'Regional Field Operations Director',
+    badgeNumber: 'WA-SUP-01',
     certificationLevel: 'Lead Auditor (ISO 55001 / OSHA 30 / NFPA 70E)',
     lastActive: '2 min ago',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&h=120&q=80',
@@ -85,14 +151,14 @@ export const PRESET_USERS: Record<UserRole, User> = {
       canViewAuditLogs: true
     }
   },
-  ADMIN: {
+  'usr-adm-01': {
     id: 'usr-adm-01',
     name: 'Elena Rostova',
-    email: 'elena.rostova@wa1-field.internal',
+    email: 'admin@fieldguard.io',
     role: 'ADMIN',
     title: 'Chief Reliability Administrator',
-    badgeNumber: 'WA-ADM-001',
-    certificationLevel: 'Systems Security & Infrastructure Architect',
+    badgeNumber: 'WA-ADM-01',
+    certificationLevel: 'Enterprise Systems & Security Architect',
     lastActive: 'Active in HQ',
     avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=120&h=120&q=80',
     permissions: {
@@ -246,6 +312,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return !!currentUser.permissions[permission];
   };
 
+  const [customUsers, setCustomUsers] = useState<User[]>([]);
+
+  const refreshUsers = useCallback(async () => {
+    try {
+      const res = await ApiClient.request<{ success: boolean; users: any[] }>('/api/admin/users', { method: 'GET' });
+      if (res.success && res.users) {
+        const mapped: User[] = res.users.map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          title: u.title,
+          badgeNumber: u.badgeNumber,
+          certificationLevel: u.certificationLevel,
+          avatar: u.avatar,
+          lastActive: 'Active recently',
+          permissions: u.role === 'ADMIN' ? PRESET_USERS.ADMIN.permissions : u.role === 'SUPERVISOR' ? PRESET_USERS.SUPERVISOR.permissions : PRESET_USERS.TECHNICIAN.permissions
+        }));
+        setCustomUsers(mapped);
+      }
+    } catch {
+      // Fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      refreshUsers();
+    }
+  }, [currentUser, refreshUsers]);
+
+  const allUsersList = customUsers.length > 0 ? customUsers : Object.values(PRESET_USERS);
+
+  const createUser = async (userData: Partial<User>): Promise<User> => {
+    const role = userData.role || 'TECHNICIAN';
+    const permissions = role === 'ADMIN' ? PRESET_USERS.ADMIN.permissions : role === 'SUPERVISOR' ? PRESET_USERS.SUPERVISOR.permissions : PRESET_USERS.TECHNICIAN.permissions;
+    const res = await ApiClient.createUser(userData);
+    const newUser: User = {
+      ...(res.user || userData),
+      permissions
+    } as User;
+    setCustomUsers(prev => [...prev, newUser]);
+    return newUser;
+  };
+
+  const updateUser = async (id: string, updates: Partial<User>): Promise<User> => {
+    const res = await ApiClient.updateUser(id, updates);
+    const updatedUser = res.user || ({ ...updates, id } as User);
+    setCustomUsers(prev => prev.map(u => u.id === id ? { ...u, ...updatedUser } : u));
+    return updatedUser;
+  };
+
+  const deleteUser = async (id: string): Promise<void> => {
+    await ApiClient.deleteUser(id);
+    setCustomUsers(prev => prev.filter(u => u.id !== id));
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -261,9 +384,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         switchRole: switchRoleQuick,
         hasRole,
         hasPermission,
-        usersList: Object.values(PRESET_USERS),
+        usersList: allUsersList,
+        createUser,
+        updateUser,
+        deleteUser,
         authError,
-        clearAuthError
+        clearAuthError,
+        refreshUsers
       }}
     >
       {children}

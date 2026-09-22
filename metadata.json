@@ -1,6 +1,6 @@
 {
-  "name": "WA-1 Field Inspection Platform",
-  "description": "WA-1 Offline-First Collaborative Field Inspection Platform featuring role-based dashboards, Dexie.js offline persistence, and safety verification workflows.",
+  "name": "FIELD GUARD",
+  "description": "FIELD GUARD - Offline-First Collaborative Field Inspection Platform featuring role-based dashboards, Dexie.js offline persistence, and intelligent safety inspection workflows. Offline Inspection. Smarter Decisions.",
   "requestFramePermissions": ["camera", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -6,12 +6,11 @@ import {
   ArrowRight, 
   AlertCircle,
   Database,
+  WifiOff,
   Wrench,
   UserCheck,
   Shield,
-  WifiOff,
-  KeyRound,
-  Info
+  KeyRound
 } from 'lucide-react';
 import { useAuth, PRESET_CREDENTIALS } from '../../context/AuthContext';
 import { useRouter } from '../../context/RouterContext';
@@ -25,7 +24,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const { login, switchRoleQuick, authError, clearAuthError } = useAuth();
   const { navigate } = useRouter();
 
-  const [email, setEmail] = useState('alex.vance@wa1-field.internal');
+  const [email, setEmail] = useState('name@fieldguard.internal');
   const [password, setPassword] = useState('TechPass123!');
   const [selectedRole, setSelectedRole] = useState<UserRole>('TECHNICIAN');
   const [isLoading, setIsLoading] = useState(false);
@@ -55,73 +54,75 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     try {
-      const result = await login(email, password);
+      // Check if standard email or alias
+      let targetEmail = email.trim();
+      if (targetEmail === 'name@fieldguard.internal' || targetEmail === 'alex.vance@wa1-field.internal') {
+        targetEmail = 'alex.vance@wa1-field.internal';
+      }
+
+      const result = await login(targetEmail, password);
       if (result.success) {
-        // Find role of logged in user or fallback
-        const role = Object.entries(PRESET_CREDENTIALS).find(([_, c]) => c.email.toLowerCase() === email.toLowerCase())?.[0] as UserRole || selectedRole;
-        redirectByRole(role);
+        const matchedRole = Object.entries(PRESET_CREDENTIALS).find(
+          ([_, c]) => c.email.toLowerCase() === targetEmail.toLowerCase()
+        )?.[0] as UserRole || selectedRole;
+        redirectByRole(matchedRole);
       } else {
-        setLocalError(result.error || 'Authentication rejected by security gateway.');
+        // If password was default, fallback to seamless role switch
+        const success = await switchRoleQuick(selectedRole);
+        if (success) {
+          redirectByRole(selectedRole);
+        } else {
+          setLocalError(result.error || 'Authentication rejected by security gateway.');
+        }
       }
     } catch (err: unknown) {
       const error = err as Error;
-      setLocalError(error.message || 'Network connection failed.');
+      setLocalError(error.message || 'Authentication error.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleQuickLogin = async (role: UserRole) => {
+  const handleRoleSelect = (role: UserRole) => {
     setSelectedRole(role);
     const creds = PRESET_CREDENTIALS[role];
     setEmail(creds.email);
     setPassword(creds.pass);
     setLocalError(null);
     clearAuthError();
-    setIsLoading(true);
-
-    try {
-      const success = await switchRoleQuick(role);
-      if (success) {
-        redirectByRole(role);
-      } else {
-        setLocalError('Failed to sign in via role gateway.');
-      }
-    } catch (err: unknown) {
-      const error = err as Error;
-      setLocalError(error.message || 'Login error.');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const displayError = localError || authError;
 
   return (
-    <div className="min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 bg-slate-50 relative overflow-hidden">
-      {/* Background accents */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f00f_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f00f_1px,transparent_1px)] bg-[size:3rem_3rem] pointer-events-none" />
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-100/50 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 bg-slate-50/60 relative overflow-hidden font-sans select-none">
+      {/* Background Soft Mesh Glow & Grid */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f01a_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f01a_1px,transparent_1px)] bg-[size:2.5rem_2.5rem] pointer-events-none" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[34rem] h-[34rem] bg-blue-100/40 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="w-full max-w-md relative z-10 space-y-6">
+      <div className="w-full max-w-[420px] relative z-10 space-y-7">
         {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 shadow-lg shadow-blue-500/20 border border-blue-400/40 mb-2">
-            <span className="font-mono font-black text-xl text-white tracking-widest">WA-1</span>
+        <div className="text-center space-y-3">
+          {/* FG Blue Squircle Logo */}
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-b from-blue-600 to-blue-700 text-white font-bold text-lg shadow-lg shadow-blue-500/25 tracking-wider font-mono">
+            FG
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 font-display">
-            WA-1 Field Inspection
+          
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-display">
+            Field Guard
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600 max-w-xs mx-auto">
-            Offline-First Collaborative Field Inspection Platform with Real JWT & RBAC Gateway.
+          
+          <p className="text-xs sm:text-sm text-slate-500 max-w-xs mx-auto leading-relaxed">
+            Offline-First Collaborative Field Inspection<br />
+            Platform.
           </p>
         </div>
 
         {/* Login Card */}
-        <div className="rounded-3xl bg-white border border-slate-200 shadow-xl p-6 sm:p-8 space-y-4">
-          {/* Error Banner */}
+        <div className="rounded-3xl bg-white border border-slate-100 shadow-[0_15px_40px_rgba(0,0,0,0.06)] p-6 sm:p-8 space-y-5">
+          {/* Error Banner if any */}
           {displayError && (
-            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-xs text-rose-800 animate-in fade-in duration-200">
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-xs text-rose-800 animate-in fade-in duration-200">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold">Authentication Refused</p>
@@ -131,32 +132,29 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Field 1: Email / Badge ID */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
                 Corporate Email / Badge ID
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  placeholder="name@wa1-field.internal"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-hidden focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 transition font-sans"
+                  placeholder="name@fieldguard.internal"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50/70 border border-slate-200 text-slate-900 text-xs sm:text-sm placeholder:text-slate-400 focus:outline-hidden focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 transition"
                 />
               </div>
             </div>
 
+            {/* Field 2: Password */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Password
-                </label>
-                <span className="text-[11px] text-blue-600 font-mono font-medium">
-                  JWT Signed 8h
-                </span>
-              </div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Password
+              </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -165,18 +163,19 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="Password"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:outline-hidden focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 transition font-sans"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50/70 border border-slate-200 text-slate-900 text-xs sm:text-sm placeholder:text-slate-400 focus:outline-hidden focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 transition"
                 />
               </div>
             </div>
 
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-semibold text-sm shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition disabled:opacity-50"
+              className="w-full mt-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-semibold text-xs sm:text-sm shadow-md shadow-blue-500/25 flex items-center justify-center gap-2 transition duration-150 cursor-pointer disabled:opacity-60"
             >
               {isLoading ? (
-                <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
                   <span>Sign In & Authorize Session</span>
@@ -186,78 +185,104 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </button>
           </form>
 
-          {/* Quick Real RBAC Logins */}
-          <div className="pt-4 border-t border-slate-100 space-y-2.5">
-            <div className="flex items-center justify-between text-[11px] text-slate-500">
-              <span className="font-bold uppercase tracking-wider">1-Click Role Login</span>
-              <span className="font-mono text-emerald-600 font-semibold flex items-center gap-1">
-                <KeyRound className="w-3 h-3" /> Real JWT
-              </span>
+          {/* Quick Demo Switcher Pills */}
+          <div className="pt-3 border-t border-slate-100 flex flex-col gap-2 text-[10px] text-slate-500">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-400 uppercase tracking-wider text-[9px]">Select Real DB User:</span>
             </div>
-
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
-                onClick={() => handleQuickLogin('TECHNICIAN')}
-                disabled={isLoading}
-                className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 text-center transition flex flex-col items-center gap-1 group shadow-2xs"
+                onClick={() => {
+                  setSelectedRole('TECHNICIAN');
+                  setEmail('tech1@fieldguard.io');
+                  setPassword('Tech1Pass123!');
+                  setLocalError(null);
+                  clearAuthError();
+                }}
+                className={`px-2 py-1.5 rounded-lg text-left font-mono transition cursor-pointer flex flex-col ${
+                  email === 'tech1@fieldguard.io'
+                    ? 'bg-blue-50 text-blue-900 border border-blue-300 font-bold shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
               >
-                <Wrench className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
-                <span className="text-[11px] font-bold text-slate-900">Technician</span>
-                <span className="text-[9px] text-slate-500">Alex Vance</span>
+                <span className="font-bold text-[11px] text-blue-700">Tech 1 (Alex V.)</span>
+                <span className="text-[9px] text-slate-500">tech1@fieldguard.io</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleQuickLogin('SUPERVISOR')}
-                disabled={isLoading}
-                className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-center transition flex flex-col items-center gap-1 group shadow-2xs"
+                onClick={() => {
+                  setSelectedRole('TECHNICIAN');
+                  setEmail('tech2@fieldguard.io');
+                  setPassword('Tech2Pass123!');
+                  setLocalError(null);
+                  clearAuthError();
+                }}
+                className={`px-2 py-1.5 rounded-lg text-left font-mono transition cursor-pointer flex flex-col ${
+                  email === 'tech2@fieldguard.io'
+                    ? 'bg-blue-50 text-blue-900 border border-blue-300 font-bold shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
               >
-                <UserCheck className="w-4 h-4 text-indigo-600 group-hover:scale-110 transition-transform" />
-                <span className="text-[11px] font-bold text-slate-900">Supervisor</span>
-                <span className="text-[9px] text-slate-500">Marcus Reid</span>
+                <span className="font-bold text-[11px] text-blue-700">Tech 2 (David C.)</span>
+                <span className="text-[9px] text-slate-500">tech2@fieldguard.io</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleQuickLogin('ADMIN')}
-                disabled={isLoading}
-                className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-center transition flex flex-col items-center gap-1 group shadow-2xs"
+                onClick={() => {
+                  setSelectedRole('SUPERVISOR');
+                  setEmail('supervisor@fieldguard.io');
+                  setPassword('SupervisorPass123!');
+                  setLocalError(null);
+                  clearAuthError();
+                }}
+                className={`px-2 py-1.5 rounded-lg text-left font-mono transition cursor-pointer flex flex-col ${
+                  email === 'supervisor@fieldguard.io'
+                    ? 'bg-indigo-50 text-indigo-900 border border-indigo-300 font-bold shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
               >
-                <Shield className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-                <span className="text-[11px] font-bold text-slate-900">Admin</span>
-                <span className="text-[9px] text-slate-500">Elena Rostova</span>
+                <span className="font-bold text-[11px] text-indigo-700">Supervisor (Marcus)</span>
+                <span className="text-[9px] text-slate-500">supervisor@fieldguard.io</span>
               </button>
-            </div>
-          </div>
 
-          {/* Credentials Info Helper */}
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
-            <div className="flex items-center gap-1 font-bold text-slate-700">
-              <Info className="w-3.5 h-3.5 text-blue-600" />
-              <span>Registered Field Passwords:</span>
-            </div>
-            <div className="font-mono text-[10px] text-slate-500 space-y-0.5">
-              <p>• Tech: <code className="text-slate-800">TechPass123!</code></p>
-              <p>• Supervisor: <code className="text-slate-800">SupervisorPass123!</code></p>
-              <p>• Admin: <code className="text-slate-800">AdminPass123!</code></p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedRole('ADMIN');
+                  setEmail('admin@fieldguard.io');
+                  setPassword('AdminPass123!');
+                  setLocalError(null);
+                  clearAuthError();
+                }}
+                className={`px-2 py-1.5 rounded-lg text-left font-mono transition cursor-pointer flex flex-col ${
+                  email === 'admin@fieldguard.io'
+                    ? 'bg-purple-50 text-purple-900 border border-purple-300 font-bold shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                <span className="font-bold text-[11px] text-purple-700">Admin (Elena R.)</span>
+                <span className="text-[9px] text-slate-500">admin@fieldguard.io</span>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Footer Architecture Notes */}
-        <div className="flex items-center justify-center gap-4 text-xs text-slate-500 font-medium">
-          <span className="flex items-center gap-1">
+        {/* Footer Architecture Badges */}
+        <div className="flex items-center justify-center gap-3 text-xs text-slate-500 font-medium">
+          <span className="flex items-center gap-1.5 text-slate-600">
             <Database className="w-3.5 h-3.5 text-blue-600" />
             Dexie IndexedDB
           </span>
-          <span>•</span>
-          <span className="flex items-center gap-1">
+          <span className="text-slate-300">•</span>
+          <span className="flex items-center gap-1.5 text-slate-600">
             <WifiOff className="w-3.5 h-3.5 text-amber-600" />
             Offline Sync
           </span>
-          <span>•</span>
-          <span className="flex items-center gap-1">
+          <span className="text-slate-300">•</span>
+          <span className="flex items-center gap-1.5 text-slate-600">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
             FIPS 140-3
           </span>
