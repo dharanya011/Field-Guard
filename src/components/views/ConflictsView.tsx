@@ -90,7 +90,7 @@ export const ConflictsView: React.FC = () => {
           ? (selectedConflict?.serverValue || '')
           : (customVal || manualValueInput || 'Manual Supervisor Override');
 
-      const auditReason = customNotes || manualNotesInput || `Resolved via WA-1 Supervisor Console by ${currentUser?.name}`;
+      const auditReason = customNotes || manualNotesInput || `Resolved via WA-1 Supervisor Console by ${currentUser?.name || 'System Supervisor'}`;
 
       await ApiClient.resolveConflict(conflictId, resolution, winningValue, auditReason);
 

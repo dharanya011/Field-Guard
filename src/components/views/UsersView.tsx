@@ -52,10 +52,10 @@ export const UsersView: React.FC = () => {
 
   const filtered = usersList.filter((u) => {
     const matchesSearch = 
-      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.badgeNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.title.toLowerCase().includes(searchTerm.toLowerCase());
+      (u.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (u.badgeNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (u.title || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
 

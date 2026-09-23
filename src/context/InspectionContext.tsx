@@ -240,12 +240,12 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (currentUser?.role === 'SUPERVISOR' && (newStatus === 'PASSED' || newStatus === 'FAILED')) {
       updatedInsp.signatures = {
         ...updatedInsp.signatures,
-        supervisor: { name: currentUser.name, timestamp: new Date().toISOString() }
+        supervisor: { name: currentUser?.name || 'Authorized Supervisor', timestamp: new Date().toISOString() }
       };
     } else if (currentUser?.role === 'TECHNICIAN' && newStatus === 'PENDING_REVIEW') {
       updatedInsp.signatures = {
         ...updatedInsp.signatures,
-        technician: { name: currentUser.name, timestamp: new Date().toISOString() }
+        technician: { name: currentUser?.name || 'Authorized Technician', timestamp: new Date().toISOString() }
       };
     }
 

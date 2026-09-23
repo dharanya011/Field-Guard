@@ -10,12 +10,14 @@ import {
   Layers, 
   HardDrive, 
   Info,
-  RefreshCw
+  RefreshCw,
+  Video
 } from 'lucide-react';
 import { ApiClient } from '../../services/api';
 import { useNetwork } from '../../context/NetworkContext';
 import { db } from '../../db/offlineDb';
 import type { EvidencePhoto } from '../../types';
+import { CameraModal } from './CameraModal';
 
 interface ResumableUploaderProps {
   inspectionId?: string;
@@ -39,6 +41,7 @@ export const ResumableUploader: React.FC<ResumableUploaderProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [description, setDescription] = useState('');
+  const [showCameraModal, setShowCameraModal] = useState<boolean>(false);
   
   // Resumable Chunk State
   const [uploadId, setUploadId] = useState<string | null>(null);
@@ -70,6 +73,21 @@ export const ResumableUploader: React.FC<ResumableUploaderProps> = ({
     setSimulatedDropAt60(false);
     setS3StorageUrl(null);
     setUploadStatusText(`File selected: ${file.name} (${(file.size / 1024).toFixed(0)} KB)`);
+  };
+
+  const handleCameraCapture = (dataUrl: string, file: File) => {
+    setSelectedFile(file);
+    setPreviewUrl(dataUrl);
+    setDescription(`Live Camera Evidence: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`);
+
+    setUploadId(null);
+    setUploadedChunks(0);
+    setUploadProgress(0);
+    setIsUploading(false);
+    setIsPaused(false);
+    setSimulatedDropAt60(false);
+    setS3StorageUrl(null);
+    setUploadStatusText(`Live camera photo captured: ${file.name}`);
   };
 
   // Preset Field Simulation Sample
@@ -261,25 +279,41 @@ export const ResumableUploader: React.FC<ResumableUploaderProps> = ({
       />
 
       {!previewUrl && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button
+            type="button"
+            onClick={() => setShowCameraModal(true)}
+            className="min-h-[48px] p-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
+          >
+            <Camera className="w-4 h-4" />
+            <span>Take Photo (Live Camera)</span>
+          </button>
+
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="min-h-[48px] p-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95"
+            className="min-h-[48px] p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
           >
-            <Camera className="w-4 h-4" />
-            <span>Capture / Select Photo</span>
+            <Upload className="w-4 h-4" />
+            <span>Upload from Device</span>
           </button>
 
           <button
             type="button"
             onClick={handleSelectPreset}
-            className="min-h-[48px] p-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 border border-slate-200 transition active:scale-95"
+            className="min-h-[48px] p-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 border border-slate-200 transition active:scale-95 cursor-pointer"
           >
-            <Upload className="w-4 h-4 text-slate-600" />
-            <span>Load 15 MB Sample Evidence</span>
+            <Layers className="w-4 h-4 text-slate-600" />
+            <span>15 MB Sample Evidence</span>
           </button>
         </div>
+      )}
+
+      {showCameraModal && (
+        <CameraModal
+          onClose={() => setShowCameraModal(false)}
+          onCapture={handleCameraCapture}
+        />
       )}
 
       {/* Selected Photo Preview Card & Chunk Controller */}
